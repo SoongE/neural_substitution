@@ -28,7 +28,7 @@ def main(cfg: DictConfig) -> None:
     optimizer, scheduler = factory.create_optimizer_and_scheduler(model, len(loaders[0]))
     criterion, scaler = factory.create_criterion_scaler()
 
-    model, model_ema, start_epoch = model_tune(model, optimizer, scaler, scheduler, cfg)
+    model, model_ema, start_epoch, scheduler = model_tune(model, optimizer, scaler, scheduler, cfg)
 
     saver = CheckpointSaver(model=model, optimizer=optimizer, args=cfg, model_ema=model_ema, amp_scaler=scaler,
                             scheduler=scheduler, max_history=cfg.train.save_max_history)

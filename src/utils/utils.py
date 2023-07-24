@@ -19,6 +19,7 @@ def model_tune(model, optimizer, loss_scaler, scheduler, cfg):
     start_epoch = 0
     if resume:
         start_epoch = resume_checkpoint(model, resume, optimizer, loss_scaler, scheduler, cfg.local_rank == 0)
+        scheduler.step(start_epoch)
 
     model_ema = ModelEmaV2(model, decay=cfg.train.model_ema_decay,
                            device='cpu' if cfg.model_ema_force_cpu else None) if cfg.train.model_ema else None
@@ -27,8 +28,9 @@ def model_tune(model, optimizer, loss_scaler, scheduler, cfg):
     if cfg.distributed:
         model = DistributedDataParallel(model, static_graph=False, device_ids=[cfg.local_rank],
                                         broadcast_buffers=cfg.train.ddp_bb)
-    # model = torch.compile(model)
-    return model, model_ema, start_epoch
+    if cfg.torchcompile:
+        model = torch.compile(model, backend='inductor')
+    return model, model_ema, start_epoch, scheduler
 
 
 def logging_benchmark_result_to_wandb(benchmark_result, exp_name):

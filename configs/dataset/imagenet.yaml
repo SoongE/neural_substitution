@@ -3,6 +3,7 @@ defaults:
 
 name: imageNet
 root: /data/imageNet
+task: multiclass
 
 in_channels: 3
 num_classes: 1000

@@ -1,11 +1,11 @@
 import torch
+from omegaconf import OmegaConf
 from timm.loss import BinaryCrossEntropy, SoftTargetCrossEntropy, LabelSmoothingCrossEntropy
-from timm.optim import Lamb, optimizer_kwargs, create_optimizer_v2
+from timm.optim import create_optimizer_v2, optimizer_kwargs
+from timm.scheduler import create_scheduler_v2, scheduler_kwargs
 from timm.utils import NativeScaler
 from torch import nn
 from torch.nn import BCEWithLogitsLoss
-from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR, ExponentialLR, LambdaLR, MultiStepLR, \
-    OneCycleLR, SequentialLR
 
 from src.models import SubResNet, AddResNet, SubMobileNet, AddMobileNet
 from src.models.mobileone import mobileone
@@ -72,37 +72,19 @@ class ObjectFactory:
         self.cfg.train.iter_per_epoch = iter_per_epoch
         self.train.iter_per_epoch = iter_per_epoch
 
-        sched = self.scheduler.sched
-
-        total_iter = self.train.epochs * self.train.iter_per_epoch
-        warmup_iter = self.scheduler.warmup_epochs * self.train.iter_per_epoch
-        lr = self.optim.lr
-
         optimizer = create_optimizer_v2(model.parameters(), **optimizer_kwargs(cfg=self.optim))
 
-        if sched == 'cosine':
-            scheduler = CosineAnnealingLR(optimizer, total_iter - warmup_iter, self.scheduler.min_lr)
-        elif sched == 'multistep':
-            scheduler = MultiStepLR(optimizer, [epoch * iter_per_epoch for epoch in self.scheduler.milestones],
-                                    self.scheduler.gamma)
-        elif sched == 'step':
-            scheduler = StepLR(optimizer, total_iter - warmup_iter, gamma=self.scheduler.decay_rate)
-        elif sched == 'explr':
-            scheduler = ExponentialLR(optimizer, gamma=self.scheduler.decay_rate)
-        elif sched == 'onecyclelr':
-            scheduler = OneCycleLR(optimizer, lr, total_iter)
-        else:
-            NotImplementedError(f"{sched} is not supported yet")
+        updates_per_epoch = \
+            (iter_per_epoch + self.optim.grad_accumulation - 1) // self.optim.grad_accumulation
 
-        if self.scheduler.warmup_epochs and sched != 'onecyclelr':
-            if self.scheduler.warmup_scheduler == 'linear':
-                lr_lambda = lambda e: (e * (
-                        lr - self.scheduler.warmup_lr) / warmup_iter + self.scheduler.warmup_lr) / lr
-                warmup_scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
-            else:
-                NotImplementedError(f"{self.scheduler.warmup_scheduler} is not supported yet")
-
-            scheduler = SequentialLR(optimizer, [warmup_scheduler, scheduler], [warmup_iter])
+        OmegaConf.set_struct(self.scheduler, False)
+        self.scheduler.epochs = self.train.epochs
+        self.scheduler.sched_on_updates = True
+        scheduler, _ = create_scheduler_v2(
+            optimizer,
+            **scheduler_kwargs(self.scheduler),
+            updates_per_epoch=updates_per_epoch,
+        )
 
         return optimizer, scheduler
 

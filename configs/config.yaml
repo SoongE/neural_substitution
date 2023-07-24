@@ -8,12 +8,16 @@ defaults:
 
 name: experiment0
 
-wandb: False
+gpus: [ 0,1 ]
+wandb: True
 distributed: False
 local_rank: 0
 world_size: 1
 port: 3456
-gpus: [ 1,2 ]
+is_master: True
+do_benchmark: False
+torchcompile: False
+
 
 hydra:
   run:

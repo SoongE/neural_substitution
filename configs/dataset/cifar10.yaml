@@ -3,6 +3,7 @@ defaults:
 
 name: cifar10
 root: /data/cifar
+task: multiclass
 
 in_channels: 3
 num_classes: 10
