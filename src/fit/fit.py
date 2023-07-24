@@ -46,7 +46,7 @@ class Fit:
 
         self.losses = MeanMetric(compute_on_step=False).to(self.device)
         self.metric_fn = self.init_metrics(cfg.dataset.task, 0.5, cfg.dataset.num_classes, cfg.dataset.num_classes,
-                                           'micro')
+                                           'macro')
 
     def __call__(self, *args, **kwargs):
         for epoch in range(self.start_epoch, self.num_epochs):
@@ -95,7 +95,7 @@ class Fit:
         total = len(self.train_loader)
         accum_steps = self.grad_accumulation
         num_updates = epoch * (updates_per_epoch := (total + accum_steps - 1) // accum_steps)
-        last_batch_idx = total-1
+        last_batch_idx = total - 1
         last_batch_idx_to_accum = total - (last_accum_steps := total % accum_steps)
 
         self.model.train()
@@ -204,7 +204,7 @@ class Fit:
         result = dict()
         result['loss'] = self.losses.compute().tolist()
         for k, fn in self.metric_fn.items():
-            result[k] = fn.compute().tolist() * 100
+            result[k] = fn.compute().tolist()
         return result
 
     @staticmethod
@@ -220,7 +220,12 @@ class Fit:
         metric_fn = dict()
 
         for metric in self.eval_metrics:
-            metric_fn[metric] = torchmetrics.__dict__[metric](task=task, threshold=threshold, num_classes=num_class,
-                                                              average='macro' if metric == 'AUROC' else average,
-                                                              num_labels=num_label, top_k=top_k).to(self.device)
+            if metric in ['Top1', 'Top5']:
+                metric_fn[metric] = torchmetrics.__dict__['Accuracy'](task=task, threshold=threshold, average='micro',
+                                                                      num_classes=num_class, num_labels=num_label,
+                                                                      top_k=int(metric[-1])).to(self.device)
+            else:
+                metric_fn[metric] = torchmetrics.__dict__[metric](task=task, threshold=threshold, num_classes=num_class,
+                                                                  average='macro' if metric == 'AUROC' else average,
+                                                                  num_labels=num_label, top_k=top_k).to(self.device)
         return metric_fn
