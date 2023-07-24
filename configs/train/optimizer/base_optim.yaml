@@ -1,0 +1,10 @@
+optim: ???
+lr: ???
+
+eps:
+betas:
+momentum: 0.9
+weight_decay: 2e-5
+clip_grad:
+clip_mode: norm
+grad_accumulation: 1

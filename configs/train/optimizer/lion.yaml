@@ -1,0 +1,6 @@
+defaults:
+  - base_optim
+
+optim: lion
+lr: 1e-6
+weight_decay: 1e-2

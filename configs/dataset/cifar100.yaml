@@ -1,0 +1,30 @@
+defaults:
+  - augmentation: base_augmentation
+
+name: cifar100
+root: /data/cifar
+
+in_channels: 3
+num_classes: 100
+size: 32
+
+train: train
+valid: test
+test: test
+
+augmentation:
+  mean: [ 0.5070751592371323, 0.48654887331495095, 0.4409178433670343 ]
+  std: [ 0.2673342858792401, 0.2564384629170883, 0.27615047132568404 ]
+
+  train_resize_mode: ResizeRandomCrop
+  train_interpolation: bicubic
+  random_crop_pad: 16
+  random_crop_scale: [ 0.08, 1.0 ]
+  random_crop_ratio: [ 0.75, 1.333 ]
+  cutmix: 1.0
+  mixup: 0.
+  remode: 0.0
+  auto_aug: aa
+  crop_pct: 1.0
+
+  test_resize_mode: resize_shorter

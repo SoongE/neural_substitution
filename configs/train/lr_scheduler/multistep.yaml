@@ -1,0 +1,7 @@
+defaults:
+  - base_scheduler
+
+sched: multistep
+decay_epochs: 100
+milestones: [60, 120, 160]
+gamma: 0.2
