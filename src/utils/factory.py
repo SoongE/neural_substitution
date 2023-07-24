@@ -1,11 +1,9 @@
 import torch
-from lion_pytorch import Lion
 from timm.loss import BinaryCrossEntropy, SoftTargetCrossEntropy, LabelSmoothingCrossEntropy
-from timm.optim import Lamb
+from timm.optim import Lamb, optimizer_kwargs, create_optimizer_v2
 from timm.utils import NativeScaler
 from torch import nn
 from torch.nn import BCEWithLogitsLoss
-from torch.optim import SGD, AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR, ExponentialLR, LambdaLR, MultiStepLR, \
     OneCycleLR, SequentialLR
 
@@ -74,25 +72,13 @@ class ObjectFactory:
         self.cfg.train.iter_per_epoch = iter_per_epoch
         self.train.iter_per_epoch = iter_per_epoch
 
-        optim = self.optim.optim
         sched = self.scheduler.sched
 
-        parameter = model.parameters()
         total_iter = self.train.epochs * self.train.iter_per_epoch
         warmup_iter = self.scheduler.warmup_epochs * self.train.iter_per_epoch
         lr = self.optim.lr
-        weight_decay = self.optim.weight_decay
 
-        if optim == 'sgd':
-            optimizer = SGD(parameter, lr, self.optim.momentum, weight_decay=weight_decay, nesterov=self.optim.nesterov)
-        elif optim == 'adamw':
-            optimizer = AdamW(parameter, lr, weight_decay=weight_decay, betas=self.optim.betas, eps=self.optim.eps)
-        elif optim == 'lion':
-            optimizer = Lion(parameter, lr, weight_decay=self.optim.weight_decay)
-        elif optim == 'lamb':
-            optimizer = Lamb(parameter, lr, weight_decay=weight_decay, betas=self.optim.betas, eps=self.optim.eps)
-        else:
-            NotImplementedError(f"{optim} is not supported yet")
+        optimizer = create_optimizer_v2(model.parameters(), **optimizer_kwargs(cfg=self.optim))
 
         if sched == 'cosine':
             scheduler = CosineAnnealingLR(optimizer, total_iter - warmup_iter, self.scheduler.min_lr)
