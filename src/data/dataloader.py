@@ -1,7 +1,9 @@
-from timm.data import create_dataset, FastCollateMixup, Mixup, AugMixDataset
+import logging
 
-from src.data import get_cifar_dataloader
-from src.data.creat_loader_v2 import create_loader_v2
+from timm.data import create_dataset, FastCollateMixup, Mixup, AugMixDataset, str_to_interp_mode
+from torchvision import transforms
+
+from src.data import create_loader_v2
 
 
 def base_dataloader(cfg):
@@ -9,12 +11,12 @@ def base_dataloader(cfg):
     dataset = cfg.dataset
 
     dataset_train = create_dataset(
-        dataset.name, root=dataset.root, split=dataset.train, is_training=True,
+        dataset.dataset_name, root=dataset.root, split=dataset.train, is_training=True,
         class_map=dataset.class_map,
         batch_size=cfg.train.batch_size,
         repeats=aug.epoch_repeats)
     dataset_eval = create_dataset(
-        dataset.name, root=dataset.root, split=dataset.valid, is_training=False,
+        dataset.dataset_name, root=dataset.root, split=dataset.valid, is_training=False,
         class_map=dataset.class_map,
         batch_size=cfg.train.batch_size)
 
@@ -78,10 +80,24 @@ def base_dataloader(cfg):
         crop_pct=aug.crop_pct,
         pin_memory=aug.pin_mem,
     )
-    return (loader_train, loader_eval)
+    return loader_train, loader_eval
 
 
 def get_dataloader(cfg):
-    if 'cifar' in cfg.dataset.name:
-        return get_cifar_dataloader(cfg)
-    return base_dataloader(cfg)
+    loader_train, loader_eval = base_dataloader(cfg)
+
+    if 'cifar' in cfg.dataset.dataset_name:
+        size = cfg.dataset.size[1]
+        loader_train.dataset.transform.transforms[0] = transforms.RandomCrop(size, padding=size // 8)
+
+        if cfg.dataset.augmentation.autoaug:
+            if cfg.dataset.augmentation.aa:
+                logging.warning(f'Timm\' RandAug is replaced by torchvision\'s AutoAug. '
+                                f'Check CIFAR configs of data.augmentation. Now "aa" is {cfg.dataset.augmentation.aa}')
+            loader_train.dataset.transform.transforms[2] = transforms.AutoAugment(
+                transforms.AutoAugmentPolicy.CIFAR10, str_to_interp_mode(cfg.dataset.augmentation.train_interpolation))
+
+        loader_eval.dataset.transform.transforms[0] = transforms.Resize(size)
+        loader_eval.dataset.transform.transforms[1] = transforms.Lambda(lambda x: x)
+
+    return loader_train, loader_eval
