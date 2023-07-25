@@ -47,11 +47,10 @@ def cuda_setting(gpus):
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(str(e) for e in gpus)
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.benchmark = True
+    # torch.backends.cudnn.deterministic = True # If deterministic = True, training time will be increased.
 
 
 def init_seed(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.benchmark = True
