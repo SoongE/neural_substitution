@@ -14,7 +14,7 @@ crop_pct: 0.875
 epoch_repeats: 0
 aug_repeats: 0
 aug_splits: 0
-re:
+
 reprob: 0
 remode: pixel
 recount: 1
