@@ -244,7 +244,7 @@ def create_loader_v2(
         loader_class = MultiEpochsDataLoader
 
     generator = torch.Generator()
-    generator.manual_seed(0)
+    generator.manual_seed(torch.get_rng_state()[0].item())
 
     loader_args = dict(
         batch_size=batch_size,
