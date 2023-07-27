@@ -24,17 +24,17 @@ train:
     min_lr: 1e-6
 
   optimizer:
-    grad_accumulation: 2
+    grad_accumulation: 8
     lr: 3.5e-3
-    weight_decay: 1e-3
+    weight_decay: 1e-2
 
 model:
   model_name:
-  drop_path_rate: 0.1
+  drop_path_rate: 0.15
   neural_drop_rate: 0.0
 
 dataset:
   augmentation:
     cutmix: 0.0
     mixup: 0.0
-    smoothing: 0.0
+    smoothing: 0.1
