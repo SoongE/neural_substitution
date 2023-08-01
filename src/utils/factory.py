@@ -72,8 +72,11 @@ class ObjectFactory:
         self.cfg.train.iter_per_epoch = iter_per_epoch
         self.train.iter_per_epoch = iter_per_epoch
 
-        filter_bias_and_bn = False if '1' in cfg.model.model_name else True
-        optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=self.optim), filter_bias_and_bn=filter_bias_and_bn)
+        b, m = cfg.model.model_name.split('_')
+        filter_bias_and_bn = False if '1' in m or '3' in m else True
+        optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=self.optim),
+                                        filter_bias_and_bn=filter_bias_and_bn)
+        print(optimizer)
 
         updates_per_epoch = \
             (iter_per_epoch + self.optim.grad_accumulation - 1) // self.optim.grad_accumulation
