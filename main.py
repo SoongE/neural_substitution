@@ -25,7 +25,7 @@ def main(cfg: DictConfig) -> None:
     factory = ObjectFactory(cfg)
 
     model = factory.create_model()
-    optimizer, scheduler = factory.create_optimizer_and_scheduler(model, len(loaders[0]))
+    optimizer, scheduler = factory.create_optimizer_and_scheduler(cfg, model, len(loaders[0]))
     criterion, scaler = factory.create_criterion_scaler()
 
     model, model_ema, start_epoch, scheduler = model_tune(model, optimizer, scaler, scheduler, cfg)
