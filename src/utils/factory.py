@@ -72,8 +72,9 @@ class ObjectFactory:
         self.cfg.train.iter_per_epoch = iter_per_epoch
         self.train.iter_per_epoch = iter_per_epoch
 
-        b, m = cfg.model.model_name.split('_')
+        b, m = cfg.model.model_name.split('_') if '_' in cfg.model.model_name else (cfg.model.model_name, '')
         filter_bias_and_bn = False if '1' in m or '3' in m else True
+        filter_bias_and_bn = False if 'mobile' in b else filter_bias_and_bn
         optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=self.optim),
                                         filter_bias_and_bn=filter_bias_and_bn)
         print(optimizer)

@@ -44,7 +44,7 @@ class Fit:
             self.train_loader = loader[0]
             self.val_loader = loader[1]
 
-        self.losses = MeanMetric(compute_on_step=False).to(self.device)
+        self.losses = MeanMetric().to(self.device)
         self.metric_fn = self.init_metrics(cfg.dataset.task, 0.5, cfg.dataset.num_classes, cfg.dataset.num_classes,
                                            'macro')
 
