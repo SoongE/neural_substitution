@@ -38,7 +38,7 @@ def base_dataloader(cfg):
         dataset_train = AugMixDataset(dataset_train, num_splits=cfg.aug_splits)
     loader_train = create_loader_v2(
         dataset_train,
-        input_size=tuple(dataset.size),
+        input_size=tuple(dataset.train_size),
         batch_size=cfg.train.batch_size,
         is_training=True,
         use_prefetcher=aug.prefetcher,
@@ -68,7 +68,7 @@ def base_dataloader(cfg):
 
     loader_eval = create_loader_v2(
         dataset_eval,
-        input_size=tuple(dataset.size),
+        input_size=tuple(dataset.test_size),
         batch_size=cfg.train.batch_size,
         is_training=False,
         use_prefetcher=aug.prefetcher,
@@ -87,7 +87,7 @@ def get_dataloader(cfg):
     loader_train, loader_eval = base_dataloader(cfg)
 
     if 'cifar' in cfg.dataset.dataset_name:
-        size = cfg.dataset.size[1]
+        size = cfg.dataset.train_size[1]
         loader_train.dataset.transform.transforms[0] = transforms.RandomCrop(size, padding=size // 8)
 
         if cfg.dataset.augmentation.autoaug:
@@ -97,7 +97,7 @@ def get_dataloader(cfg):
             loader_train.dataset.transform.transforms[2] = transforms.AutoAugment(
                 transforms.AutoAugmentPolicy.CIFAR10, str_to_interp_mode(cfg.dataset.augmentation.train_interpolation))
 
-        loader_eval.dataset.transform.transforms[0] = transforms.Resize(size)
+        loader_eval.dataset.transform.transforms[0] = transforms.Resize(cfg.dataset.test_size[1])
         loader_eval.dataset.transform.transforms[1] = transforms.Lambda(lambda x: x)
 
     return loader_train, loader_eval
