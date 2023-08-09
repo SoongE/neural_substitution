@@ -19,14 +19,17 @@ train:
   lr_scheduler:
     warmup_epochs: 3
     warmup_lr: 1e-4
+    min_lr: 1e-6
 
   optimizer:
     grad_accumulation: 2
+    lr: 3.5e-3
+    weight_decay: 1e-2
 
 model:
   model_name:
   drop_path_rate: 0.05
-  neural_drop_rate: 0.1
+  neural_drop_rate: 0.0
 
 dataset:
   augmentation:
