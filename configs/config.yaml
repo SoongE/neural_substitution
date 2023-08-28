@@ -4,7 +4,6 @@ defaults:
   - dataset: imagenet
   - info: info
   - model: base_model
-  - benchmark: benchmark
 
 name: experiment0
 

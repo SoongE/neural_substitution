@@ -27,4 +27,4 @@ channels_last: True
 amp: True
 resume: False
 resume_opt: True
-save_max_history: 5
+save_max_history: 1
