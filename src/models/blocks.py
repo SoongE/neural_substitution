@@ -76,17 +76,15 @@ def substitute(x, conv_layer, shuffle, neural_drop_rate, training):
     n_x = x.size(-1)
     n_conv = len(conv_layer)
     feature_shape = list(x.size()[1:-1])
-    x_out = None
+    x_out = list()
 
     x = x.permute(4, 0, 1, 2, 3).reshape(-1, *feature_shape)
 
     for conv in conv_layer:
-        out = conv(x)
-        out = out.reshape(n_x, -1, *list(out.size()[1:]))
-        if x_out is None:
-            x_out = out
-        else:
-            x_out = torch.cat([x_out, out], dim=0)
+        x_out.append(conv(x))
+
+    x_out = torch.cat(x_out, dim=0)
+    x_out = x_out.reshape(n_x * n_conv, -1, *list(x_out.size()[1:]))
 
     if training:
         if shuffle > random.random():
@@ -584,7 +582,7 @@ class SubLinear(nn.Module):
 
 # For Conv
 if __name__ == '__main__':
-    block = SubInceptionV1in1Block(5, 10, (3, 3), 3, padding=1, stochastic=1.0)
+    block = SubInceptionV1Block(5, 10, (3, 3), 3, padding=1, stochastic=1.0)
     n_param = sum(p.numel() for p in block.parameters() if p.requires_grad)
     input = torch.rand(2, 5, 32, 32, 3)
 
