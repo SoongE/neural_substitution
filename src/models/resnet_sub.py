@@ -590,6 +590,10 @@ backbones = {
 methods = {
     'Sub33': dict(sub_block=SubConvBNBlock, n_block=2),
     'Sub333': dict(sub_block=SubConvBNBlock, n_block=3),
+    'Sub3333': dict(sub_block=SubConvBNBlock, n_block=4),
+    'Sub33333': dict(sub_block=SubConvBNBlock, n_block=5),
+    'Sub6': dict(sub_block=SubConvBNBlock, n_block=6),
+    'Sub10': dict(sub_block=SubConvBNBlock, n_block=10),
     'SubInceptionV1': dict(sub_block=SubInceptionV1Block, n_block=4),
     'SubInceptionV2': dict(sub_block=SubInceptionV2Block, n_block=3),
     'SubInceptionV3': dict(sub_block=SubInceptionV3Block, n_block=4),
