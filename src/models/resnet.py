@@ -575,6 +575,7 @@ methods = {
     'Add33': dict(add_block=AddConvBNBlock, n_block=2),
     'Add333': dict(add_block=AddConvBNBlock, n_block=3),
     'Add3333': dict(add_block=AddConvBNBlock, n_block=4),
+    'Add33333': dict(add_block=AddConvBNBlock, n_block=5),
     'Add6': dict(add_block=AddConvBNBlock, n_block=6),
     'Add10': dict(add_block=AddConvBNBlock, n_block=10),
     'AddInceptionV1': dict(add_block=AddInceptionV1Block, n_block=4),
@@ -584,7 +585,6 @@ methods = {
 }
 
 
-@register_model
 def AddResNet(name, pretrained=False, **kwargs):
     name = name.split('_')
     if len(name) == 1:

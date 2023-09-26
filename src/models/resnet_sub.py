@@ -601,7 +601,6 @@ methods = {
 }
 
 
-@register_model
 def SubResNet(name, stochastic=1.0, pretrained=False, **kwargs):
     b, m = name.split('_')
     model_args = dict(**backbones[b], **methods[m], stochastic=stochastic, **kwargs)

@@ -9,10 +9,10 @@ from src.models.resnet import AddResNet
 from src.models.resnet_sub import SubResNet
 
 if __name__ == '__main__':
-    # backbones = ['resnet18', 'resnet34', 'resnet50', 'mobilenet']
+    # backbones = ['resnet18', 'resnet34', 'resnet50', 'mobilenet', 'mobileone']
     # methods = ['AddInceptionV1', 'AddInceptionV2', 'AddInceptionV3', 'SubInceptionV1', 'SubInceptionV2', 'SubInceptionV3']
-    backbones = ['mobileone']
-    methods = ['Sub']
+    backbones = ['resnet18']
+    methods = ['SubInceptionV2']
 
     kwargs = {}
     for b_name in backbones:
