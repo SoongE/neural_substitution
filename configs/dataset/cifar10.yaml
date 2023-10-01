@@ -21,5 +21,11 @@ augmentation:
   std: [ 0.2673342858792401, 0.2564384629170883, 0.27615047132568404 ]
 
   train_interpolation: bicubic
+  aa:
   autoaug: True
   crop_pct: 1.0
+
+  color_jitter: 0.0
+  mixup: 0.0
+  cutmix: 0.0
+  smoothing: 0.0

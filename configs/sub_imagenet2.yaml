@@ -32,6 +32,7 @@ model:
   neural_drop_rate: 0.0
 
 dataset:
+  train_size: [ 3,160,160 ]
   augmentation:
     mixup: 0.1
     cutmix: 1.0

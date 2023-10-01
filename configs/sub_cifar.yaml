@@ -35,7 +35,7 @@ model:
 
 dataset:
   augmentation:
-    aa: rand-m7-mstd0.5-inc1
+    aa:
     cutmix: 0.0
     mixup: 0.0
     smoothing: 0.0

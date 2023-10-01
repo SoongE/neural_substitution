@@ -34,8 +34,8 @@ model:
 dataset:
   augmentation:
     mixup: 0.1
-    cumix: 1.0
+    cutmix: 1.0
     crop_pct: 0.95
     aa: rand-m7-mstd0.5-inc1
-    aug_repeat: 0
+    aug_repeats: 0
     smoothing: 0.0

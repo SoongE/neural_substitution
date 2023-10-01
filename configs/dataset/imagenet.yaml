@@ -8,7 +8,7 @@ task: multiclass
 
 in_channels: 3
 num_classes: 1000
-train_size: [ 3,160,160 ]
+train_size: [ 3,224,224 ]
 test_size: [ 3,224,224 ]
 
 train: train
