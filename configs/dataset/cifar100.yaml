@@ -3,7 +3,7 @@ defaults:
 
 name: cifar100
 dataset_name: torch/cifar100
-root: /data/cifar
+root: /data
 task: multiclass
 
 in_channels: 3
