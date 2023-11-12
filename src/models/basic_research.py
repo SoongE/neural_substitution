@@ -12,7 +12,7 @@ if __name__ == '__main__':
     # backbones = ['resnet18', 'resnet34', 'resnet50', 'mobilenet', 'mobileone']
     # methods = ['AddInceptionV1', 'AddInceptionV2', 'AddInceptionV3', 'SubInceptionV1', 'SubInceptionV2', 'SubInceptionV3']
     backbones = ['resnet18']
-    methods = ['SubInceptionV2']
+    methods = ['Sub333']
 
     kwargs = {}
     for b_name in backbones:

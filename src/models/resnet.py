@@ -6,7 +6,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from timm import model_entrypoint
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
-from timm.models import register_model
 from timm.models.helpers import build_model_with_cfg, checkpoint_seq
 from timm.models.layers import DropBlock2d, DropPath, AvgPool2dSame, create_attn, get_act_layer, get_norm_layer, \
     create_classifier

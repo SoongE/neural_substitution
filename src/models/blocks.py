@@ -1,10 +1,7 @@
-import random
-
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from timm.layers import drop_path
 
 
 def fuse_bn(conv, bn, scale=1):
@@ -87,9 +84,9 @@ def substitute(x, conv_layer, shuffle, neural_drop_rate, training):
     x_out = x_out.reshape(n_x * n_conv, -1, *list(x_out.size()[1:]))
 
     if training:
-        if shuffle > random.random():
-            x_out = x_out[torch.randperm(x_out.size(0))]
-        x_out = drop_path(x_out, neural_drop_rate, training)
+        # if shuffle > random.random():
+        x_out = x_out[torch.randperm(x_out.size(0))]
+        # x_out = drop_path(x_out, neural_drop_rate, training)
     x_out = x_out.reshape(n_conv, n_x, *list(x_out.size()[1:]))
 
     return x_out.sum(1).permute(1, 2, 3, 4, 0)

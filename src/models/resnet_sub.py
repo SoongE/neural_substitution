@@ -7,7 +7,6 @@ import torch.nn.functional as F
 from timm.models.helpers import build_model_with_cfg, checkpoint_seq
 from timm.models.layers import DropBlock2d, DropPath, create_attn, get_act_layer, get_norm_layer, \
     create_classifier
-from timm.models.registry import register_model
 
 from src.models.blocks import SubConvBNBlock, SubInceptionV1Block, SubInceptionV2Block, SubInceptionV3Block, \
     SubInceptionV1in1Block
@@ -109,7 +108,7 @@ def make_blocks(
             stride = stride if block_idx == 0 else 1
             block_dpr = drop_path_rate * net_block_idx / (net_num_blocks - 1)  # stochastic depth linear decay rule
             block_kwargs['neural_drop_rate'] = block_kwargs.get('neural_drop_rate', 0.0) * net_block_idx / (
-                        net_num_blocks - 1)
+                    net_num_blocks - 1)
             blocks.append(block_fn(
                 inplanes, planes, stride, downsample, first_dilation=prev_dilation, sub_block=sub_block,
                 n_block=n_block, stochastic=stochastic, drop_path=DropPath(block_dpr) if block_dpr > 0. else None,
