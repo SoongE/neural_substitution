@@ -16,6 +16,23 @@ def fuse_bn(conv, bn, scale=1):
     return kernel * t, beta - running_mean * gamma / std
 
 
+def fuse_only_bn(bn, kernel_size, scale=1):
+    dim = bn.weight.size(0)
+    kernel = torch.zeros((dim, dim, *kernel_size), dtype=bn.weight.dtype, device=bn.weight.device)
+    for i in range(dim):
+        kernel[i, i % dim, kernel_size[0] // 2, kernel_size[0] // 2] = 1
+
+    running_mean = bn.running_mean * scale
+    running_var = bn.running_var
+    gamma = bn.weight
+    beta = bn.bias * scale
+    eps = bn.eps
+
+    std = (running_var + eps).sqrt()
+    t = (gamma / std).reshape(-1, 1, 1, 1)
+    return kernel * t, beta - running_mean * gamma / std
+
+
 def fuse_fc(fc_layers, scale=1):
     w, b = 0, 0
     for fc in fc_layers:
@@ -34,7 +51,7 @@ def expend_kernel(kernel, target_kernel_size):
 
 def merge_1x1_kxk(k1, b1, k2, b2, groups=1):
     if groups == 1:
-        k = F.conv2d(k2, k1.permute(1, 0, 2, 3))
+        k = F.conv2d(k2, k1.permute(1, 0, 2, 3), )
         b_hat = (k2 * b1.reshape(1, -1, 1, 1)).sum((1, 2, 3))
     else:
         k_slices = []
@@ -460,6 +477,410 @@ class SubInceptionV3Block(nn.Module):
         return substitute(x, self.blocks.values(), self.stochastic, self.neural_drop_rate, self.training)
 
 
+class SubInceptionV4MinusBNBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, bias=False, stochastic=1.0,
+                 bn=nn.BatchNorm2d, neural_drop_rate=0.0, n_block=0, hidden_channels=None, **kwargs):
+        super().__init__()
+        self.conv_args = {
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            'kernel_size': kernel_size,
+            'stride': stride,
+            'padding': padding,
+            'bias': bias,
+            **kwargs
+        }
+        hidden_channels = hidden_channels if hidden_channels else in_channels
+        self.conv_reparam = None
+        self.stochastic = stochastic
+        self.n_flow = 1
+        self.neural_drop_rate = neural_drop_rate
+
+        self.blocks = nn.ModuleDict()
+
+        # kxk
+        self.blocks.update({'kxk': nn.Sequential(
+            nn.Conv2d(**self.conv_args),
+            bn(out_channels),
+        )})
+
+        self.need_pool = False if stride == 1 else True
+        # 1x1
+        if self.need_pool:
+            self.blocks.update({'1x1': nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), bias=False, **kwargs),
+                BNAndPadLayer(padding, out_channels),
+                nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
+                bn(out_channels),
+            )})
+        else:
+            self.blocks.update({'1x1': nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, (1, 1), bias=False, **kwargs),
+                bn(out_channels),
+            )})
+
+        # ds
+        self.blocks.update({'ds': nn.Sequential(
+            nn.Conv2d(in_channels, hidden_channels, (1, 1), bias=False, **kwargs),
+            bn(hidden_channels),
+            nn.Conv2d(hidden_channels, out_channels, kernel_size, stride=stride, bias=False, padding=padding),
+            bn(out_channels),
+        )})
+
+    def re_parameterization(self):
+        self.conv_args['bias'] = True
+        self.conv_reparam = nn.Conv2d(**self.conv_args)
+
+        _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
+
+        if self.need_pool:
+            _k1, _b1 = fuse_bn(*self.blocks['1x1'][:2], self.n_flow)
+            _k11 = avg_to_kernel(self.conv_reparam.out_channels, self.conv_reparam.kernel_size,
+                                 self.conv_reparam.groups)
+            _k11, _b11 = fuse_bn(_k11.to(self.blocks['1x1'][0].weight.device), self.blocks['1x1'][3], self.n_flow)
+            _k1, _b1 = merge_1x1_kxk(_k1, _b1, _k11, _b11, self.conv_reparam.groups)
+        else:
+            _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
+            _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
+
+        _k3, _b3 = fuse_bn(*self.blocks['ds'][:2], self.n_flow)
+        _k33, _b33 = fuse_bn(*self.blocks['ds'][2:], self.n_flow)
+        _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33)
+
+        self.conv_reparam.weight.data = sum([_k0, _k1, _k3])
+        self.conv_reparam.bias.data = sum([_b0, _b1, _b3])
+        self.__delattr__('blocks')
+
+    def forward(self, x):
+        if self.conv_reparam:
+            return self.conv_reparam(x)
+        self.n_flow = x.size(-1)
+        return substitute(x, self.blocks.values(), self.stochastic, self.neural_drop_rate, self.training)
+
+
+class SubInceptionV4Block(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, bias=False, stochastic=1.0,
+                 bn=nn.BatchNorm2d, neural_drop_rate=0.0, n_block=0, hidden_channels=None, **kwargs):
+        super().__init__()
+        self.conv_args = {
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            'kernel_size': kernel_size,
+            'stride': stride,
+            'padding': padding,
+            'bias': bias,
+            **kwargs
+        }
+        hidden_channels = hidden_channels if hidden_channels else in_channels
+        self.conv_reparam = None
+        self.stochastic = stochastic
+        self.n_flow = 1
+        self.neural_drop_rate = neural_drop_rate
+
+        self.blocks = nn.ModuleDict()
+
+        # kxk
+        self.blocks.update({'kxk': nn.Sequential(
+            nn.Conv2d(**self.conv_args),
+            bn(out_channels),
+        )})
+
+        self.need_pool = False if stride == 1 else True
+        # 1x1
+        if self.need_pool:
+            self.blocks.update({'1x1': nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), bias=False, **kwargs),
+                BNAndPadLayer(padding, out_channels),
+                nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
+                bn(out_channels),
+            )})
+        else:
+            self.blocks.update({'1x1': nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, (1, 1), bias=False, **kwargs),
+                bn(out_channels),
+            )})
+
+        # bn
+        if self.need_pool:
+            self.blocks.update({'bn': nn.Sequential(
+                nn.ZeroPad2d(1),
+                nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
+                bn(in_channels),
+            )})
+        else:
+            self.blocks.update({'bn': bn(in_channels)})
+
+        # ds
+        self.blocks.update({'ds': nn.Sequential(
+            nn.Conv2d(in_channels, hidden_channels, (1, 1), bias=False, **kwargs),
+            bn(hidden_channels),
+            nn.Conv2d(hidden_channels, out_channels, kernel_size, stride=stride, bias=False, padding=padding),
+            bn(out_channels),
+        )})
+
+    def re_parameterization(self):
+        self.conv_args['bias'] = True
+        self.conv_reparam = nn.Conv2d(**self.conv_args)
+
+        _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
+
+        if self.need_pool:
+            _k1, _b1 = fuse_bn(*self.blocks['1x1'][:2], self.n_flow)
+            _k11 = avg_to_kernel(self.conv_reparam.out_channels, self.conv_reparam.kernel_size,
+                                 self.conv_reparam.groups)
+            _k11, _b11 = fuse_bn(_k11.to(self.blocks['1x1'][0].weight.device), self.blocks['1x1'][3], self.n_flow)
+            _k1, _b1 = merge_1x1_kxk(_k1, _b1, _k11, _b11, self.conv_reparam.groups)
+        else:
+            _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
+            _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
+
+        if self.need_pool:
+            _k22 = avg_to_kernel(self.conv_reparam.out_channels, self.conv_reparam.kernel_size,
+                                 self.conv_reparam.groups)
+            _k2, _b2 = fuse_bn(_k22.to(self.blocks['bn'][2].weight.device), self.blocks['bn'][2], self.n_flow)
+        else:
+            _k2, _b2 = fuse_only_bn(self.blocks['bn'], self.conv_args['kernel_size'], self.n_flow)
+            _k2 = expend_kernel(_k2, self.conv_args['kernel_size'])
+
+        _k3, _b3 = fuse_bn(*self.blocks['ds'][:2], self.n_flow)
+        _k33, _b33 = fuse_bn(*self.blocks['ds'][2:], self.n_flow)
+        _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33)
+
+        self.conv_reparam.weight.data = sum([_k0, _k1, _k2, _k3])
+        self.conv_reparam.bias.data = sum([_b0, _b1, _b2, _b3])
+        self.__delattr__('blocks')
+
+    def forward(self, x):
+        if self.conv_reparam:
+            return self.conv_reparam(x)
+        self.n_flow = x.size(-1)
+        return substitute(x, self.blocks.values(), self.stochastic, self.neural_drop_rate, self.training)
+
+
+class SubInceptionV5MinusBNBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, bias=False, stochastic=1.0,
+                 bn=nn.BatchNorm2d, neural_drop_rate=0.0, n_block=0, hidden_channels=None, **kwargs):
+        super().__init__()
+        self.conv_args = {
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            'kernel_size': kernel_size,
+            'stride': stride,
+            'padding': padding,
+            'bias': bias,
+            **kwargs
+        }
+        hidden_channels = hidden_channels if hidden_channels else in_channels
+        self.conv_reparam = None
+        self.stochastic = stochastic
+        self.n_flow = 1
+        self.neural_drop_rate = neural_drop_rate
+
+        self.blocks = nn.ModuleDict()
+
+        # kxk
+        self.blocks.update({'kxk': nn.Sequential(
+            nn.Conv2d(**self.conv_args),
+            bn(out_channels),
+        )})
+
+        self.need_pool = False if stride == 1 else True
+        # 1x1
+        if self.need_pool:
+            self.blocks.update({'1x1': nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), bias=False, **kwargs),
+                BNAndPadLayer(padding, out_channels),
+                nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
+                bn(out_channels),
+            )})
+        else:
+            self.blocks.update({'1x1': nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, (1, 1), bias=False, **kwargs),
+                bn(out_channels),
+            )})
+
+        # ds
+        self.blocks.update({'ds': nn.Sequential(
+            nn.Conv2d(in_channels, hidden_channels, (1, 1), bias=False, **kwargs),
+            bn(hidden_channels),
+            nn.Conv2d(hidden_channels, out_channels, kernel_size, stride=stride, bias=False, padding=padding),
+            bn(out_channels),
+        )})
+
+        _padding = (1 // 2, 3 // 2)
+        # 1x3
+        self.blocks.update({'1x3': nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=(1, 3), bias=False, stride=stride, padding=_padding,
+                      **kwargs),
+            bn(out_channels),
+        )})
+
+        _padding = (3 // 2, 1 // 2)
+        # 3x1
+        self.blocks.update({'3x1': nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=(3, 1), bias=False, stride=stride, padding=_padding,
+                      **kwargs),
+            bn(out_channels),
+        )})
+
+    def re_parameterization(self):
+        self.conv_args['bias'] = True
+        self.conv_reparam = nn.Conv2d(**self.conv_args)
+
+        _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
+
+        if self.need_pool:
+            _k1, _b1 = fuse_bn(*self.blocks['1x1'][:2], self.n_flow)
+            _k11 = avg_to_kernel(self.conv_reparam.out_channels, self.conv_reparam.kernel_size,
+                                 self.conv_reparam.groups)
+            _k11, _b11 = fuse_bn(_k11.to(self.blocks['1x1'][0].weight.device), self.blocks['1x1'][3], self.n_flow)
+            _k1, _b1 = merge_1x1_kxk(_k1, _b1, _k11, _b11, self.conv_reparam.groups)
+        else:
+            _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
+            _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
+
+        _k3, _b3 = fuse_bn(*self.blocks['ds'][:2], self.n_flow)
+        _k33, _b33 = fuse_bn(*self.blocks['ds'][2:], self.n_flow)
+        _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33)
+
+        _k4, _b4 = fuse_bn(*self.blocks['1x3'], self.n_flow)
+        _k4 = expend_kernel(_k4, self.conv_args['kernel_size'])
+
+        _k5, _b5 = fuse_bn(*self.blocks['3x1'], self.n_flow)
+        _k5 = expend_kernel(_k5, self.conv_args['kernel_size'])
+
+        self.conv_reparam.weight.data = sum([_k0, _k1, _k3, _k4, _k5])
+        self.conv_reparam.bias.data = sum([_b0, _b1, _b3, _b4, _b5])
+        self.__delattr__('blocks')
+
+    def forward(self, x):
+        if self.conv_reparam:
+            return self.conv_reparam(x)
+        self.n_flow = x.size(-1)
+        return substitute(x, self.blocks.values(), self.stochastic, self.neural_drop_rate, self.training)
+
+
+class SubInceptionV5Block(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, bias=False, stochastic=1.0,
+                 bn=nn.BatchNorm2d, neural_drop_rate=0.0, n_block=0, hidden_channels=None, **kwargs):
+        super().__init__()
+        self.conv_args = {
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            'kernel_size': kernel_size,
+            'stride': stride,
+            'padding': padding,
+            'bias': bias,
+            **kwargs
+        }
+        hidden_channels = hidden_channels if hidden_channels else in_channels
+        self.conv_reparam = None
+        self.stochastic = stochastic
+        self.n_flow = 1
+        self.neural_drop_rate = neural_drop_rate
+
+        self.blocks = nn.ModuleDict()
+
+        # kxk
+        self.blocks.update({'kxk': nn.Sequential(
+            nn.Conv2d(**self.conv_args),
+            bn(out_channels),
+        )})
+
+        self.need_pool = False if stride == 1 else True
+        # 1x1
+        if self.need_pool:
+            self.blocks.update({'1x1': nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), bias=False, **kwargs),
+                BNAndPadLayer(padding, out_channels),
+                nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
+                bn(out_channels),
+            )})
+        else:
+            self.blocks.update({'1x1': nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, (1, 1), bias=False, **kwargs),
+                bn(out_channels),
+            )})
+
+        # bn
+        if self.need_pool:
+            self.blocks.update({'bn': nn.Sequential(
+                nn.ZeroPad2d(1),
+                nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
+                bn(in_channels),
+            )})
+        else:
+            self.blocks.update({'bn': bn(in_channels)})
+
+        # ds
+        self.blocks.update({'ds': nn.Sequential(
+            nn.Conv2d(in_channels, hidden_channels, (1, 1), bias=False, **kwargs),
+            bn(hidden_channels),
+            nn.Conv2d(hidden_channels, out_channels, kernel_size, stride=stride, bias=False, padding=padding),
+            bn(out_channels),
+        )})
+
+        _padding = (1 // 2, 3 // 2)
+        # 1x3
+        self.blocks.update({'1x3': nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=(1, 3), bias=False, stride=stride, padding=_padding,
+                      **kwargs),
+            bn(out_channels),
+        )})
+
+        _padding = (3 // 2, 1 // 2)
+        # 3x1
+        self.blocks.update({'3x1': nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=(3, 1), bias=False, stride=stride, padding=_padding,
+                      **kwargs),
+            bn(out_channels),
+        )})
+
+    def re_parameterization(self):
+        self.conv_args['bias'] = True
+        self.conv_reparam = nn.Conv2d(**self.conv_args)
+
+        _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
+
+        if self.need_pool:
+            _k1, _b1 = fuse_bn(*self.blocks['1x1'][:2], self.n_flow)
+            _k11 = avg_to_kernel(self.conv_reparam.out_channels, self.conv_reparam.kernel_size,
+                                 self.conv_reparam.groups)
+            _k11, _b11 = fuse_bn(_k11.to(self.blocks['1x1'][0].weight.device), self.blocks['1x1'][3], self.n_flow)
+            _k1, _b1 = merge_1x1_kxk(_k1, _b1, _k11, _b11, self.conv_reparam.groups)
+        else:
+            _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
+            _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
+
+        if self.need_pool:
+            _k22 = avg_to_kernel(self.conv_reparam.out_channels, self.conv_reparam.kernel_size,
+                                 self.conv_reparam.groups)
+            _k2, _b2 = fuse_bn(_k22.to(self.blocks['bn'][2].weight.device), self.blocks['bn'][2], self.n_flow)
+        else:
+            _k2, _b2 = fuse_only_bn(self.blocks['bn'], self.conv_args['kernel_size'], self.n_flow)
+            _k2 = expend_kernel(_k2, self.conv_args['kernel_size'])
+
+        _k3, _b3 = fuse_bn(*self.blocks['ds'][:2], self.n_flow)
+        _k33, _b33 = fuse_bn(*self.blocks['ds'][2:], self.n_flow)
+        _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33)
+
+        _k4, _b4 = fuse_bn(*self.blocks['1x3'], self.n_flow)
+        _k4 = expend_kernel(_k4, self.conv_args['kernel_size'])
+
+        _k5, _b5 = fuse_bn(*self.blocks['3x1'], self.n_flow)
+        _k5 = expend_kernel(_k5, self.conv_args['kernel_size'])
+
+        self.conv_reparam.weight.data = sum([_k0, _k1, _k2, _k3, _k4, _k5])
+        self.conv_reparam.bias.data = sum([_b0, _b1, _b2, _b3, _b4, _b5])
+        self.__delattr__('blocks')
+
+    def forward(self, x):
+        if self.conv_reparam:
+            return self.conv_reparam(x)
+        self.n_flow = x.size(-1)
+        return substitute(x, self.blocks.values(), self.stochastic, self.neural_drop_rate, self.training)
+
+
 class AddConvBNBlock(SubConvBNBlock):
     def forward(self, x):
         if self.conv_reparam:
@@ -579,7 +1000,7 @@ class SubLinear(nn.Module):
 
 # For Conv
 if __name__ == '__main__':
-    block = SubInceptionV1Block(5, 10, (3, 3), 3, padding=1, stochastic=1.0)
+    block = SubInceptionV5Block(5, 5, (3, 3), 2, padding=1, stochastic=1.0)
     n_param = sum(p.numel() for p in block.parameters() if p.requires_grad)
     input = torch.rand(2, 5, 32, 32, 3)
 
