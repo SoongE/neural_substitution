@@ -39,6 +39,7 @@ def init_distributed(cfg):
 
         cfg.is_master = cfg.local_rank == 0
 
+
 def cuda_setting(gpus):
     if isinstance(gpus, int):
         gpus = [gpus]
