@@ -599,7 +599,7 @@ methods = {
     'SubInceptionV3': dict(sub_block=SubInceptionV3Block, n_block=4),
     'SubInceptionV4MB': dict(sub_block=SubInceptionV4MinusBNBlock, n_block=3),
     'SubInceptionV4': dict(sub_block=SubInceptionV4Block, n_block=4),
-    'SubInceptionV5MB': dict(sub_block=SubInceptionV5MinusBNBlock, n_block=5),
+    'SubInceptionV5MB': dict(sub_block=SubInceptionV5MinusBNBlock, n_block=6),
     'SubInceptionV5': dict(sub_block=SubInceptionV5Block, n_block=6),
     'SubInceptionV1in1': dict(sub_block=SubInceptionV1in1Block, n_block=3)
 }

@@ -3,6 +3,7 @@ import time
 import torch
 
 from src.models import deploy, mobileone
+from src.models.deit import SubDeit
 from src.models.mobilenetv1 import AddMobileNet
 from src.models.mobilenetv1_sub import SubMobileNet
 from src.models.resnet import AddResNet
@@ -11,8 +12,8 @@ from src.models.resnet_sub import SubResNet
 if __name__ == '__main__':
     # backbones = ['resnet18', 'resnet34', 'resnet50', 'mobilenet', 'mobileone']
     # methods = ['AddInceptionV1', 'AddInceptionV2', 'AddInceptionV3', 'SubInceptionV1', 'SubInceptionV2', 'SubInceptionV3']
-    backbones = ['resnet18']
-    methods = ['Sub333']
+    backbones = ['deitTiny']
+    methods = ['SubMlp3']
 
     kwargs = {}
     for b_name in backbones:
@@ -31,6 +32,8 @@ if __name__ == '__main__':
             if b_name.startswith('mobileone') and m_name.startswith('Sub'):
                 model_class = mobileone
                 kwargs.update({'substitution': True})
+            if b_name.startswith('deit') and m_name.startswith('Sub'):
+                model_class = SubDeit
 
             name = f'{b_name}_{m_name}'
 

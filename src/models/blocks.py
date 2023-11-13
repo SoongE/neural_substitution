@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from einops import rearrange
 
 
 def fuse_bn(conv, bn, scale=1):
@@ -723,6 +724,12 @@ class SubInceptionV5MinusBNBlock(nn.Module):
             bn(out_channels),
         )})
 
+        # kxk
+        self.blocks.update({'kxk2': nn.Sequential(
+            nn.Conv2d(**self.conv_args),
+            bn(out_channels),
+        )})
+
     def re_parameterization(self):
         self.conv_args['bias'] = True
         self.conv_reparam = nn.Conv2d(**self.conv_args)
@@ -739,6 +746,8 @@ class SubInceptionV5MinusBNBlock(nn.Module):
             _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
             _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
 
+        _k2, _b2 = fuse_bn(*self.blocks['kxk2'], self.n_flow)
+
         _k3, _b3 = fuse_bn(*self.blocks['ds'][:2], self.n_flow)
         _k33, _b33 = fuse_bn(*self.blocks['ds'][2:], self.n_flow)
         _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33)
@@ -749,8 +758,8 @@ class SubInceptionV5MinusBNBlock(nn.Module):
         _k5, _b5 = fuse_bn(*self.blocks['3x1'], self.n_flow)
         _k5 = expend_kernel(_k5, self.conv_args['kernel_size'])
 
-        self.conv_reparam.weight.data = sum([_k0, _k1, _k3, _k4, _k5])
-        self.conv_reparam.bias.data = sum([_b0, _b1, _b3, _b4, _b5])
+        self.conv_reparam.weight.data = sum([_k0, _k1, _k2, _k3, _k4, _k5])
+        self.conv_reparam.bias.data = sum([_b0, _b1, _b2, _b3, _b4, _b5])
         self.__delattr__('blocks')
 
     def forward(self, x):
@@ -977,6 +986,73 @@ class SubLinear(nn.Module):
             else:
                 x_out = x_out + out
         return x_out.reshape(n_x, -1, x_out.size(-1)).sum(0)
+
+
+class SubMlp(nn.Module):
+    def __init__(
+            self,
+            in_features,
+            hidden_features=None,
+            out_features=None,
+            n_blocks=4,
+            N=14,
+    ):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features or in_features
+        self.hidden_features = hidden_features or in_features
+        self.n_blocks = n_blocks
+        self.N = N
+
+        self.fc1 = None
+        self.fc2 = None
+
+        self.fc_list1 = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(self.in_features, self.hidden_features, (1, 1), bias=False),
+                nn.BatchNorm2d(self.hidden_features),
+            ) for _ in range(n_blocks)])
+        self.act = nn.ReLU()
+        self.fc_list2 = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(self.hidden_features, self.out_features, (1, 1), bias=False),
+                nn.BatchNorm2d(self.out_features),
+            ) for _ in range(n_blocks)])
+
+    def forward(self, x):
+        x = rearrange(x, 'b (n1 n2) c -> b c n1 n2', n1=self.N, n2=self.N)
+        if self.fc1:
+            out = self.fc2(self.act(self.fc1(x)))
+        else:
+            xs = substitute(x.unsqueeze(-1), self.fc_list1, 0, 0, self.training)
+            xs = self.guided_activation(xs)
+            xs = substitute(xs, self.fc_list2, 0, 0, self.training)
+            out = xs.sum(-1)
+        return rearrange(out, 'b c n1 n2 -> b (n1 n2) c')
+
+    def guided_activation(self, xs):
+        x = torch.sum(xs, dim=4).squeeze(-1)
+        x = self.act(x)
+
+        dead_idx = x == 0
+        xs[dead_idx] = 0
+        return xs
+
+    def fc_list_re_parameterization(self, in_features, out_features, fc_list, scale):
+        fc = nn.Conv2d(in_features, out_features, (1, 1))
+        eq_k, eq_b = get_equivalent_kernel_bias(fc_list, scale)
+        fc.weight.data = eq_k
+        fc.bias.data = eq_b
+
+        return fc
+
+    def re_parameterization(self):
+        self.fc1 = self.fc_list_re_parameterization(self.in_features, self.hidden_features, self.fc_list1, 1)
+        self.fc2 = self.fc_list_re_parameterization(self.hidden_features, self.out_features, self.fc_list2,
+                                                    self.n_blocks)
+
+        self.__delattr__('fc_list1')
+        self.__delattr__('fc_list2')
 
 
 # For FC
