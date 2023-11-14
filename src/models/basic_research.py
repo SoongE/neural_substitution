@@ -12,8 +12,8 @@ from src.models.resnet_sub import SubResNet
 if __name__ == '__main__':
     # backbones = ['resnet18', 'resnet34', 'resnet50', 'mobilenet', 'mobileone']
     # methods = ['AddInceptionV1', 'AddInceptionV2', 'AddInceptionV3', 'SubInceptionV1', 'SubInceptionV2', 'SubInceptionV3']
-    backbones = ['deitTiny']
-    methods = ['SubMlp3']
+    backbones = ['resnet50']
+    methods = ['SubInceptionV6X2']
 
     kwargs = {}
     for b_name in backbones:
@@ -37,7 +37,7 @@ if __name__ == '__main__':
 
             name = f'{b_name}_{m_name}'
 
-            model = model_class(name, stochastic=1.0, neural_drop_rate=0.2, **kwargs)
+            model = model_class(name, stochastic=1.0, neural_drop_rate=0.0, **kwargs)
             model.init_weights(bn_init=True)
             input = torch.rand(12, 3, 224, 224)
             s = time.time()

@@ -10,7 +10,7 @@ from timm.models.layers import DropBlock2d, DropPath, create_attn, get_act_layer
 
 from src.models.blocks import SubConvBNBlock, SubInceptionV1Block, SubInceptionV2Block, SubInceptionV3Block, \
     SubInceptionV1in1Block, SubInceptionV4Block, SubInceptionV5Block, SubInceptionV4MinusBNBlock, \
-    SubInceptionV5MinusBNBlock
+    SubInceptionV5MinusBNBlock, SubInceptionV6Block
 from src.models.utils import activation_for_substitute
 
 
@@ -599,8 +599,12 @@ methods = {
     'SubInceptionV3': dict(sub_block=SubInceptionV3Block, n_block=4),
     'SubInceptionV4MB': dict(sub_block=SubInceptionV4MinusBNBlock, n_block=3),
     'SubInceptionV4': dict(sub_block=SubInceptionV4Block, n_block=4),
-    'SubInceptionV5MB': dict(sub_block=SubInceptionV5MinusBNBlock, n_block=6),
+    'SubInceptionV5MB': dict(sub_block=SubInceptionV5MinusBNBlock, n_block=5),
     'SubInceptionV5': dict(sub_block=SubInceptionV5Block, n_block=6),
+    'SubInceptionV6': dict(sub_block=SubInceptionV6Block, n_block=6),
+    'SubInceptionV6G': dict(sub_block=SubInceptionV6Block, n_block=6, groups=True),
+    'SubInceptionV6X2': dict(sub_block=partial(SubInceptionV6Block, ratio=2), n_block=6),
+    'SubInceptionV6X4': dict(sub_block=partial(SubInceptionV6Block, ratio=4), n_block=6),
     'SubInceptionV1in1': dict(sub_block=SubInceptionV1in1Block, n_block=3)
 }
 
@@ -612,6 +616,6 @@ def SubResNet(name, stochastic=1.0, pretrained=False, **kwargs):
 
 
 if __name__ == '__main__':
-    model = SubResNet('resnet50_SubInceptionV5MB', stem_type='cifar')
+    model = SubResNet('resnet18_SubInceptionV6X2', stem_type='cifar')
     input = torch.rand(2, 3, 32, 32)
     out = model(input)
