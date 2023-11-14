@@ -11,7 +11,7 @@ info:
 
 train:
   epochs: 300
-  batch_size: 128
+  batch_size: 256
   num_workers: 8
 
   scheduler:
@@ -20,7 +20,7 @@ train:
     min_lr: 1e-5
   
   optimizer:
-    grad_accumulation: 4
+    grad_accumulation: 2
     lr: 5e-4
     opt_eps: 1e-8
     momentum: 0.9
