@@ -37,5 +37,4 @@ dataset:
     cutmix: 1.0
     crop_pct: 0.95
     aa: rand-m7-mstd0.5-inc1
-    aug_repeats: 0
     smoothing: 0.0

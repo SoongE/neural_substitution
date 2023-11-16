@@ -29,7 +29,6 @@ train:
 model:
   model_name:
   drop_path_rate: 0.15
-  neural_drop_rate: 0.0
 
 dataset:
   train_size: [ 3,160,160 ]
@@ -38,5 +37,4 @@ dataset:
     cutmix: 1.0
     crop_pct: 0.95
     aa: rand-m7-mstd0.5-inc1
-    aug_repeats: 3
     smoothing: 0.0
