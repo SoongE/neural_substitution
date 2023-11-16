@@ -315,14 +315,6 @@ class BasicBlockSub(nn.Module):
         # if getattr(self.bn2, 'weight', None) is not None:
         #     nn.init.zeros_(self.bn2.weight)
 
-    def re_parameterize(self):
-        assert self.re_parameterized is False, f'Re-parameterization already done'
-        self.conv1.re_parameterization()
-        self.conv2.re_parameterization()
-        if self.downsample:
-            self.downsample.re_parameterization()
-        self.re_parameterized = True
-
     def train_forward(self, x):
         if x.dim() == 4:
             x = x.unsqueeze(-1)

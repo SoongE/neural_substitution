@@ -55,7 +55,7 @@ def expend_kernel(kernel, target_kernel_size):
 
 def merge_1x1_kxk(k1, b1, k2, b2, groups=1):
     if groups == 1:
-        k = F.conv2d(k2, k1.permute(1, 0, 2, 3), )
+        k = F.conv2d(k2, k1.permute(1, 0, 2, 3))
         b_hat = (k2 * b1.reshape(1, -1, 1, 1)).sum((1, 2, 3))
     else:
         k_slices = []
@@ -720,7 +720,8 @@ class SubInceptionV6Block(nn.Module):
         self.blocks.update({'dsx4': nn.Sequential(
             nn.Conv2d(in_channels, hidden_channels2, kernel_size=(1, 1), bias=False, groups=kwargs.get('groups', 1)),
             BNAndPadLayer(padding, hidden_channels2),
-            nn.Conv2d(hidden_channels2, out_channels, kernel_size=kernel_size, stride=stride, bias=False, **kwargs),
+            nn.Conv2d(hidden_channels2, out_channels, kernel_size=kernel_size, stride=stride, bias=False,
+                      groups=kwargs.get('groups', 1)),
             bn(out_channels),
         )})
 
@@ -742,11 +743,11 @@ class SubInceptionV6Block(nn.Module):
 
         _k3, _b3 = fuse_bn(*self.blocks['dsx2'][:2], self.n_flow)
         _k33, _b33 = fuse_bn(*self.blocks['dsx2'][2:], self.n_flow)
-        _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33)
+        _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33, self.conv_args.get('groups', 1))
 
         _k4, _b4 = fuse_bn(*self.blocks['dsx4'][:2], self.n_flow)
         _k44, _b44 = fuse_bn(*self.blocks['dsx4'][2:], self.n_flow)
-        _k4, _b4 = merge_1x1_kxk(_k4, _b4, _k44, _b44)
+        _k4, _b4 = merge_1x1_kxk(_k4, _b4, _k44, _b44, self.conv_args.get('groups', 1))
 
         self.conv_reparam.weight.data = sum([_k0, _k1, _k3, _k4])
         self.conv_reparam.bias.data = sum([_b0, _b1, _b3, _b4])

@@ -6,6 +6,7 @@ from src.models import deploy, mobileone
 from src.models.deit import SubDeit
 from src.models.mobilenetv1 import AddMobileNet
 from src.models.mobilenetv1_sub import SubMobileNet
+from src.models.mobileone_sub import mobileoneSub
 from src.models.resnet import AddResNet
 from src.models.resnet_sub import SubResNet
 from src.utils.metadata import count_parameters
@@ -13,8 +14,8 @@ from src.utils.metadata import count_parameters
 if __name__ == '__main__':
     # backbones = ['resnet18', 'resnet34', 'resnet50', 'mobilenet', 'mobileone']
     # methods = ['AddInceptionV1', 'AddInceptionV2', 'AddInceptionV3', 'SubInceptionV1', 'SubInceptionV2', 'SubInceptionV3']
-    backbones = ['resnet50']
-    methods = ['SubInceptionV7']
+    backbones = ['mobileone']
+    methods = ['SubInceptionV6']
 
     kwargs = {}
     for b_name in backbones:
@@ -29,15 +30,14 @@ if __name__ == '__main__':
                 model_class = SubMobileNet
             if b_name.startswith('mobileone') and m_name.startswith('Add'):
                 model_class = mobileone
-                kwargs.update({'substitution': False})
             if b_name.startswith('mobileone') and m_name.startswith('Sub'):
-                model_class = mobileone
-                kwargs.update({'substitution': True})
+                model_class = mobileoneSub
             if b_name.startswith('deit') and m_name.startswith('Sub'):
                 model_class = SubDeit
 
             name = f'{b_name}_{m_name}'
-            default_model = AddResNet(f'{b_name}_origin')
+            # default_model = AddMobileNet(f'{b_name}_origin')
+            default_model = mobileone('')
             default_model.eval()
 
             default_param = count_parameters(default_model)

@@ -9,6 +9,7 @@ from torch.nn import BCEWithLogitsLoss
 
 from src.models import SubResNet, AddResNet, SubMobileNet, AddMobileNet, SubDeit
 from src.models.mobileone import mobileone
+from src.models.mobileone_sub import mobileoneSub
 
 
 def create_model_cls(model_name, in_channels, num_classes, **kwargs):
@@ -27,8 +28,7 @@ def create_model_cls(model_name, in_channels, num_classes, **kwargs):
             model_cls = AddMobileNet
     elif 'mobileone' in model_name:
         if 'Sub' in model_name:
-            model_cls = mobileone
-            kwargs.update({'substitution': True})
+            model_cls = mobileoneSub
         else:
             model_cls = mobileone
             kwargs.update({'substitution': False})

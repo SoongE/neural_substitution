@@ -80,7 +80,7 @@ class MobileNetV1(nn.Module):
 
 
 methods = {
-    '': dict(block_fn=ConvBNBlock, n_block=1),
+    'origin': dict(block_fn=ConvBNBlock, n_block=1),
     'Add33': dict(block_fn=AddConvBNBlock, n_block=2),
     'Add333': dict(block_fn=AddConvBNBlock, n_block=3),
     'AddInceptionV1': dict(block_fn=AddInceptionV1Block, n_block=4),

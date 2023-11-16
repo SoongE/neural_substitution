@@ -8,7 +8,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from timm.models import register_model
 
-from src.models.blocks import SubConvBNBlock, SubInceptionV1Block, SubInceptionV2Block, SubInceptionV3Block
+from src.models.blocks import SubConvBNBlock, SubInceptionV1Block, SubInceptionV2Block, SubInceptionV3Block, \
+    SubInceptionV6Block
 from src.models.utils import activation_for_substitute
 
 
@@ -20,19 +21,12 @@ class Block(nn.Module):
         neural_drop_rate = kwargs.get('neural_drop_rate', 0.0)
 
         self.conv1 = block_fn(in_planes, in_planes, kernel_size=(3, 3), stride=stride, padding=1, groups=in_planes,
-                              n_block=n_block, stochastic=stochastic, hidden_channels=in_planes * 2,
-                              neural_drop_rate=neural_drop_rate)
+                              n_block=n_block)
         self.conv2 = SubConvBNBlock(in_planes, out_planes, kernel_size=(1, 1), stride=1, padding=0, n_block=n_block,
                                     stochastic=stochastic, neural_drop_rate=neural_drop_rate)
 
         self.act = nn.ReLU()
         self.re_parameterized = False
-
-    def re_parameterize(self):
-        assert self.re_parameterized is False, f'Re-parameterization already done'
-        self.conv1.re_parameterization()
-        self.conv2.re_parameterization()
-        self.re_parameterized = True
 
     def train_forward(self, x):
         if x.dim() == 4:
@@ -119,6 +113,7 @@ methods = {
     'SubInceptionV1': dict(block_fn=SubInceptionV1Block, n_block=4),
     'SubInceptionV2': dict(block_fn=SubInceptionV2Block, n_block=3),
     'SubInceptionV3': dict(block_fn=SubInceptionV3Block, n_block=4),
+    'SubInceptionV6': dict(block_fn=SubInceptionV6Block, n_block=4),
 }
 
 
@@ -130,7 +125,7 @@ def SubMobileNet(name, stochastic=1.0, pretrained=False, **kwargs):
 
 
 if __name__ == '__main__':
-    net = SubMobileNet('mob_SubInceptionV1', stem_type='cifar')
+    net = SubMobileNet('mob_SubInceptionV6', stem_type='cifar')
     net.eval()
     x = torch.randn(2, 3, 32, 32)
     y = net(x)
