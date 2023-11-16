@@ -34,7 +34,8 @@ from timm.layers import PatchEmbed, Mlp, DropPath, PatchDropout, trunc_normal_, 
     get_act_layer
 from timm.models import named_apply, build_model_with_cfg
 
-from src.models.blocks import SubMlp
+from src.models.utils import deploy
+from src.models.blocks import SubMlp, SubMlpV2, SubMlpV3
 
 
 class Attention(nn.Module):
@@ -439,8 +440,10 @@ backbones = {
 
 methods = {
     'origin': dict(),
-    'SubMlp3': dict(mlp_layer=partial(SubMlp, n_blocks=4, N=14)),
+    'SubMlp3': dict(mlp_layer=partial(SubMlp, n_blocks=3, N=14)),
     'SubMlp4': dict(mlp_layer=partial(SubMlp, n_blocks=4, N=14)),
+    'SubMlpV2': dict(mlp_layer=partial(SubMlpV2, n_blocks=3, N=14)),
+    'SubMlpV3': dict(mlp_layer=partial(SubMlpV3, n_blocks=3, N=14)),
 }
 
 
@@ -455,8 +458,13 @@ def SubDeit(name, pretrained=False, **kwargs):
 
 
 if __name__ == '__main__':
-    model = SubDeit('deitTiny_SubMlp3')
+    model = SubDeit('deitTiny_SubMlpV3')
+    model.eval()
+
     input = torch.rand(2, 3, 224, 224)
     out = model(input)
+    deploy(model)
+    re_out = model(input)
 
-    print(out.shape)
+    print(out.shape, re_out.shape)
+    print(((out - re_out) ** 2).mean())
