@@ -152,8 +152,9 @@ class MobileOneBlock(nn.Module):
                                           bias=True)
         else:
             # Re-parameterizable skip connection
-            self.rbr_skip = nn.BatchNorm2d(num_features=in_channels) \
-                if out_channels == in_channels and stride == 1 else None
+            # self.rbr_skip = nn.BatchNorm2d(num_features=in_channels) \
+            #     if out_channels == in_channels and stride == 1 else None
+            self.rbr_skip = None # We don't use this skip
 
             # Re-parameterizable conv branches
             hidden_channels1 = int(in_channels * 2)
