@@ -99,7 +99,7 @@ class Fit:
         last_batch_idx_to_accum = total - (last_accum_steps := total % accum_steps)
 
         self.model.train()
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad(set_to_none=True)
         for i, data in enumerate(self.train_loader):
             update_grad = (i == last_batch_idx) or (i + 1) % accum_steps == 0
             update_idx = i // accum_steps
