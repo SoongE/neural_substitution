@@ -29,6 +29,7 @@ def create_model_cls(model_name, in_channels, num_classes, **kwargs):
     elif 'mobileone' in model_name:
         if 'Sub' in model_name:
             model_cls = mobileoneSub
+            kwargs.update({'substitution': True})
         else:
             model_cls = mobileone
             kwargs.update({'substitution': False})

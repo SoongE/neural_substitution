@@ -55,7 +55,7 @@ if __name__ == '__main__':
             print(time.time() - s)
             if out.dim() == 5:
                 out = out.sum(-1)
-            print(f"{name}: ", ((out - re_out) ** 2).sum().item())
+            print(f"{name} Diff: ", ((out - re_out) ** 2).sum().item())
             re_param = count_parameters(model)
             print(param, re_param, default_param)
             print(f"Parameter: {count_parameters(model) / count_parameters(default_model)}")

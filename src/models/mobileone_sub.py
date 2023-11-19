@@ -2,6 +2,7 @@
 # For licensing see accompanying LICENSE file.
 # Copyright (C) 2022 Apple Inc. All Rights Reserved.
 #
+import random
 from typing import Optional, List, Tuple
 
 import torch
@@ -10,27 +11,34 @@ import torch.nn.functional as F
 
 __all__ = ['MobileOne', 'mobileone', 'reparameterize_model']
 
+from timm.layers import drop_path
+
 from timm.models import register_model
 
-from src.models.blocks import BNAndPadLayer, merge_1x1_kxk, fuse_bn
+from src.models.blocks import BNAndPadLayer, fuse_bn, merge_1x1_kxk
 
 
 def substitute(x, conv_layer, shuffle, neural_drop_rate, training):
     n_x = x.size(-1)
     n_conv = len(conv_layer)
     feature_shape = list(x.size()[1:-1])
-    x_out = list()
+    x_out = None
 
     x = x.permute(4, 0, 1, 2, 3).reshape(-1, *feature_shape)
 
     for conv in conv_layer:
-        x_out.append(conv(x))
+        out = conv(x)
+        out = out.reshape(n_x, -1, *list(out.size()[1:]))
+        if x_out is None:
+            x_out = out
+        else:
+            x_out = torch.cat([x_out, out], dim=0)
 
-    x_out = torch.cat(x_out, dim=0)
-    x_out = x_out.reshape(n_x * n_conv, -1, *list(x_out.size()[1:]))
-
+    randidx = torch.randperm(x_out.size(0))
     if training:
-        x_out = x_out[torch.randperm(x_out.size(0))]
+        if shuffle > random.random():
+            x_out = x_out[randidx]
+        x_out = drop_path(x_out, neural_drop_rate, training)
     x_out = x_out.reshape(n_conv, n_x, *list(x_out.size()[1:]))
 
     return x_out.sum(1).permute(1, 2, 3, 4, 0)
@@ -38,6 +46,7 @@ def substitute(x, conv_layer, shuffle, neural_drop_rate, training):
 
 def activation_for_substitute(xs, x):
     dead_idx = x == 0
+    dead_idx.unsqueeze(-1).repeat(1, 1, 1, 1, xs.size(-1))
     xs[dead_idx] = 0
     return xs
 
@@ -127,11 +136,11 @@ class MobileOneBlock(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.num_conv_branches = num_conv_branches
+        self.padding = padding
+        self.dilation = dilation
         self.substitution = substitution
         self.stochastic = stochastic
         self.neural_drop_rate = neural_drop_rate
-        self.padding = padding
-        self.dilation = dilation
         self.n_flow = 1
 
         # Check if SE-ReLU is requested
@@ -152,45 +161,33 @@ class MobileOneBlock(nn.Module):
                                           bias=True)
         else:
             # Re-parameterizable skip connection
-            # self.rbr_skip = nn.BatchNorm2d(num_features=in_channels) \
-            #     if out_channels == in_channels and stride == 1 else None
-            self.rbr_skip = None # We don't use this skip
+            self.rbr_skip = nn.BatchNorm2d(num_features=in_channels) \
+                if out_channels == in_channels and stride == 1 else None
 
             # Re-parameterizable conv branches
-            hidden_channels1 = int(in_channels * 2)
-            hidden_channels2 = int(in_channels * 4)
-            self.rbr_conv = nn.ModuleDict()
-            # ds
-            self.rbr_conv.update({'dsx2': nn.Sequential(
-                nn.Conv2d(in_channels, hidden_channels1, kernel_size=(1, 1), bias=False, groups=groups),
-                BNAndPadLayer(padding, hidden_channels1),
-                nn.Conv2d(hidden_channels1, out_channels, kernel_size=kernel_size, stride=stride, bias=False,
-                          groups=groups),
-                nn.BatchNorm2d(out_channels),
-            )})
+            rbr_conv = list()
+            if self.num_conv_branches == 1:
+                rbr_conv.append(self._conv_bn(kernel_size=kernel_size, padding=padding))
+            else:
+                hidden_channels1 = int(in_channels * 2)
+                hidden_channels2 = int(in_channels * 4)
 
-            # ds
-            self.rbr_conv.update({'dsx4': nn.Sequential(
-                nn.Conv2d(in_channels, hidden_channels2, kernel_size=(1, 1), bias=False, groups=groups),
-                BNAndPadLayer(padding, hidden_channels2),
-                nn.Conv2d(hidden_channels2, out_channels, kernel_size=kernel_size, stride=stride, bias=False,
-                          groups=groups),
-                nn.BatchNorm2d(out_channels),
-            )})
+                rbr_conv.append(nn.Sequential(
+                    nn.Conv2d(in_channels, hidden_channels1, kernel_size=(1, 1), bias=False, groups=groups),
+                    BNAndPadLayer(padding, hidden_channels1),
+                    nn.Conv2d(hidden_channels1, out_channels, kernel_size=kernel_size, stride=stride, bias=False,
+                              groups=groups),
+                    nn.BatchNorm2d(out_channels),
+                ))
+                rbr_conv.append(nn.Sequential(
+                    nn.Conv2d(in_channels, hidden_channels2, kernel_size=(1, 1), bias=False, groups=groups),
+                    BNAndPadLayer(padding, hidden_channels2),
+                    nn.Conv2d(hidden_channels2, out_channels, kernel_size=kernel_size, stride=stride, bias=False,
+                              groups=groups),
+                    nn.BatchNorm2d(out_channels),
+                ))
 
-            self.rbr_conv.update({'kxk': nn.Sequential(
-                nn.Conv2d(in_channels=in_channels,
-                          out_channels=out_channels,
-                          kernel_size=kernel_size,
-                          stride=stride,
-                          padding=padding,
-                          dilation=dilation,
-                          groups=groups,
-                          bias=False
-                          ),
-                nn.BatchNorm2d(out_channels),
-            )})
-            self.num_conv_branches = 3
+            self.rbr_conv = nn.ModuleList(rbr_conv)
 
             # Re-parameterizable scale branch
             self.rbr_scale = None
@@ -201,7 +198,7 @@ class MobileOneBlock(nn.Module):
             if self.substitution:
                 self.sub_act = nn.ReLU()
                 self.layers = nn.ModuleList()
-                self.layers.extend(self.rbr_conv.values())
+                self.layers.extend(self.rbr_conv)
                 if self.rbr_scale:
                     self.layers.append(self.rbr_scale)
                 if self.rbr_skip:
@@ -294,18 +291,18 @@ class MobileOneBlock(nn.Module):
             kernel_identity, bias_identity = self._fuse_bn_tensor(self.rbr_skip, self.n_flow)
 
         # get weights and bias of conv branches
-        _k1, _b1 = fuse_bn(*self.rbr_conv['kxk'], self.n_flow)
+        if self.num_conv_branches == 1:
+            kernel_conv, bias_conv = self._fuse_bn_tensor(self.rbr_conv[0], self.n_flow)
+        else:
+            kernel_conv = 0
+            bias_conv = 0
+            for ix in range(2):
+                _k1, _b1 = fuse_bn(*self.rbr_conv[ix][:2], self.n_flow)
+                _k2, _b2 = fuse_bn(*self.rbr_conv[ix][2:], self.n_flow)
+                _kernel, _bias = merge_1x1_kxk(_k1, _b1, _k2, _b2, self.groups)
 
-        _k2, _b2 = fuse_bn(*self.rbr_conv['dsx2'][:2], self.n_flow)
-        _k22, _b22 = fuse_bn(*self.rbr_conv['dsx2'][2:], self.n_flow)
-        _k2, _b2 = merge_1x1_kxk(_k2, _b2, _k22, _b22, self.groups)
-
-        _k3, _b3 = fuse_bn(*self.rbr_conv['dsx4'][:2], self.n_flow)
-        _k33, _b33 = fuse_bn(*self.rbr_conv['dsx4'][2:], self.n_flow)
-        _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33, self.groups)
-
-        kernel_conv = _k1 + _k2 + _k3
-        bias_conv = _b1 + _b2 + _b3
+                kernel_conv += _kernel
+                bias_conv += _bias
 
         kernel_final = kernel_conv + kernel_scale + kernel_identity
         bias_final = bias_conv + bias_scale + bias_identity
@@ -398,6 +395,7 @@ class MobileOne(nn.Module):
         """
         super().__init__()
 
+        assert substitution
         assert len(width_multipliers) == 4
         self.inference_mode = inference_mode
         self.in_planes = min(64, int(64 * width_multipliers[0]))
@@ -522,7 +520,7 @@ PARAMS = {
     "s4": {"width_multipliers": (3.0, 3.5, 3.5, 4.0), "use_se": True},
 
     "s0+": {"width_multipliers": (0.75, 1.0, 1.0, 2.0), "num_conv_branches": 2},
-    "s1+": {"width_multipliers": (1.5, 1.5, 2.0, 2.5)},
+    "s1+": {"width_multipliers": (1.5, 1.5, 2.0, 2.5), "num_conv_branches": 2},
 }
 
 

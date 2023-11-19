@@ -29,9 +29,9 @@ def init_distributed(cfg):
                 init_method='env://',
             )
 
-        cfg.local_rank = torch.distributed.get_rank()
+        cfg.local_rank = int(os.environ.get('LOCAL_RANK', 0))
         cfg.world_size = torch.distributed.get_world_size()
-        torch.cuda.set_device(cfg.local_rank)
+        # torch.cuda.set_device(cfg.local_rank)
         torch.cuda.empty_cache()
 
         if cfg.local_rank != 0:
@@ -44,7 +44,7 @@ def cuda_setting(gpus):
     if isinstance(gpus, int):
         gpus = [gpus]
     os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-    os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(str(e) for e in gpus)
+    # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(str(e) for e in gpus)
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.benchmark = True
     # torch.backends.cudnn.deterministic = True # If deterministic = True, training time will be increased.
