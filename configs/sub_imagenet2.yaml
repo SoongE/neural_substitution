@@ -7,7 +7,7 @@ gpus: [ 0,1,2,3 ]
 name: ${model.model_name}
 
 info:
-  project: Neural_Substitution_ImageNet_ForResNet50 # olny for r50
+  project: Neural_Substitution_ImageNet # olny for r50
 
 train:
   epochs: 100
