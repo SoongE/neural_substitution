@@ -38,7 +38,8 @@ def create_model_cls(model_name, in_channels, num_classes, **kwargs):
         model_cls = SubDeit
     else:
         raise NotImplementedError(f'{model_name} is not implemented')
-    return torch.jit.script(model_cls(model_name, **kwargs))
+    # return torch.jit.script(model_cls(model_name, **kwargs))
+    return model_cls(model_name, **kwargs)
 
 
 class ObjectFactory:
