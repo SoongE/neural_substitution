@@ -53,6 +53,7 @@ class Fit:
                                            'macro')
 
     def __call__(self, *args, **kwargs):
+        eval_metrics = None
         for epoch in range(self.start_epoch, self.num_epochs):
             if self.distributed and hasattr(self.train_loader.sampler, 'set_epoch'):
                 self.train_loader.sampler.set_epoch(epoch)
@@ -61,14 +62,19 @@ class Fit:
             if self.distributed and self.dist_bn in ('broadcast', 'reduce'):
                 distribute_bn(self.model, self.world_size, self.dist_bn == 'reduce')
 
-            if self.model_ema:
-                if self.distributed and self.dist_bn in ('broadcast', 'reduce'):
-                    distribute_bn(self.model_ema, self.world_size, self.dist_bn == 'reduce')
-                eval_metrics = self.validate(epoch, ema=True)
-                if self.double_valid:
-                    _ = self.validate(epoch, ema=False)
+            if (epoch % 10 == 0) or epoch > 85:
+                if self.model_ema:
+                    if self.distributed and self.dist_bn in ('broadcast', 'reduce'):
+                        distribute_bn(self.model_ema, self.world_size, self.dist_bn == 'reduce')
+                    eval_metrics = self.validate(epoch, ema=True)
+                    if self.double_valid:
+                        _ = self.validate(epoch, ema=False)
+                else:
+                    eval_metrics = self.validate(epoch, ema=False)
             else:
-                eval_metrics = self.validate(epoch, ema=False)
+                if eval_metrics is None:
+                    self._reset_metric()
+                    eval_metrics = self._metrics()
 
             # save proper checkpoint with eval metric
             if self._master_node:
