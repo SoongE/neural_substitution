@@ -10,6 +10,7 @@ from torch.nn import BCEWithLogitsLoss
 from src.models import SubResNet, AddResNet, SubMobileNet, AddMobileNet, SubDeit
 from src.models.mobileone import mobileone
 from src.models.mobileone_sub import mobileoneSub
+from src.models.resnet_sub_scriptable import SubResNetScript
 
 
 def create_model_cls(model_name, in_channels, num_classes, **kwargs):
@@ -37,7 +38,7 @@ def create_model_cls(model_name, in_channels, num_classes, **kwargs):
         model_cls = SubDeit
     else:
         raise NotImplementedError(f'{model_name} is not implemented')
-    return model_cls(model_name, **kwargs)
+    return torch.jit.script(model_cls(model_name, **kwargs))
 
 
 class ObjectFactory:
