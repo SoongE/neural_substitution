@@ -1,4 +1,6 @@
 import logging
+import time
+from datetime import timedelta
 
 import torch
 import torchmetrics
@@ -24,10 +26,11 @@ class Fit:
         self.double_valid = cfg.train.double_valid
         self.wandb = cfg.wandb
         self.start_epoch, self.num_epochs = epochs
-        self.logging_interval = 50
+        self.logging_interval = 1
         self.num_classes = cfg.dataset.num_classes
         self.tm = cfg.train.target_metric
         self.eval_metrics = cfg.train.eval_metrics
+        self.sample_size = cfg.train.batch_size * cfg.train.optimizer.grad_accumulation * self.world_size
 
         self.model = model
         if isinstance(criterion, (list, tuple)):
@@ -44,6 +47,7 @@ class Fit:
             self.train_loader = loader[0]
             self.val_loader = loader[1]
 
+        self.duration = torchmetrics.MeanMetric().to(self.device)
         self.losses = MeanMetric().to(self.device)
         self.metric_fn = self.init_metrics(cfg.dataset.task, 0.5, cfg.dataset.num_classes, cfg.dataset.num_classes,
                                            'macro')
@@ -100,6 +104,7 @@ class Fit:
 
         self.model.train()
         self.optimizer.zero_grad(set_to_none=True)
+        start_time = time.perf_counter()
         for i, data in enumerate(self.train_loader):
             update_grad = (i == last_batch_idx) or (i + 1) % accum_steps == 0
             update_idx = i // accum_steps
@@ -116,17 +121,23 @@ class Fit:
 
             num_updates += 1
             mean_loss = self.losses.compute()
+            end_time = time.perf_counter()
+            duration = self.duration(end_time - start_time)
             if update_idx % self.logging_interval == 0:
                 lrl = [param_group['lr'] for param_group in self.optimizer.param_groups]
                 lr = sum(lrl) / len(lrl)
-
+                mean_duration = self.duration.compute()
                 if self._master_node:
                     logging.info(f'Train: {epoch:>3} [{update_idx:>4d}/{updates_per_epoch}]  '
                                  f'({100. * update_idx / (updates_per_epoch - 1):>3.0f}%)]  '
                                  f'Loss: {loss.item():#.3g} ({mean_loss:#.3g})  '
-                                 f'LR: {lr:.3e}  ')
-
+                                 f'LR: {lr:.3e}  '
+                                 f'TP: {self.sample_size / mean_duration:>7.2f}/s  '
+                                 f'RT: {duration:.2f} ({mean_duration:.2f})  '
+                                 f'ETA: {timedelta(seconds=int((updates_per_epoch - update_idx) * duration))}  '
+                                 )
             self.scheduler.step_update(num_updates=num_updates, metric=mean_loss)
+            start_time = time.perf_counter()
 
         if hasattr(self.optimizer, 'sync_lookahead'):
             self.optimizer.sync_lookahead()
