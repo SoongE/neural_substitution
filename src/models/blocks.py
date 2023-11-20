@@ -91,25 +91,21 @@ def get_equivalent_kernel_bias(convbn, scale):
 
 
 def substitute(x, conv_layer, shuffle, neural_drop_rate, training):
+    n_batch = x.size(0)
     n_x = x.size(-1)
     n_conv = len(conv_layer)
-    feature_shape = list(x.size()[1:-1])
+
     x_out = list()
-
-    x = x.permute(4, 0, 1, 2, 3).reshape(-1, *feature_shape)
-
+    x = x.permute(4, 0, 1, 2, 3).flatten(0, 1)
     for conv in conv_layer:
         x_out.append(conv(x))
 
-    x_out = torch.cat(x_out, dim=0)
-    x_out = x_out.reshape(n_x * n_conv, -1, *list(x_out.size()[1:]))
+    x_out = torch.cat(x_out, dim=0).unflatten(0, (n_x * n_conv, n_batch))
 
     if training:
-        # if shuffle > random.random():
         x_out = x_out[torch.randperm(x_out.size(0))]
-        # x_out = drop_path(x_out, neural_drop_rate, training)
-    x_out = x_out.reshape(n_conv, n_x, *list(x_out.size()[1:]))
 
+    x_out = x_out.unflatten(0, (n_conv, n_x))
     return x_out.sum(1).permute(1, 2, 3, 4, 0)
 
 
