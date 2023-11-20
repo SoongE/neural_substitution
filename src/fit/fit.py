@@ -186,7 +186,7 @@ class Fit:
             self._default_backward(loss, update_grad, second_order)
 
         if update_grad:
-            self.optimizer.zero_grad()
+            self.optimizer.zero_grad(set_to_none=True)
             if self.model_ema:
                 self.model_ema.update(self.model)
 
