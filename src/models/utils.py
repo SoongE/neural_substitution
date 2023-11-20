@@ -8,8 +8,8 @@ from torch import Tensor
 
 
 def activation_for_substitute(xs, x):
-    dead_idx = x == 0
-    xs[dead_idx] = 0
+    dead_idx = (x != 0).float()
+    xs = torch.mul(xs, dead_idx.unsqueeze(-1))
     return xs
 
 
