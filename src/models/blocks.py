@@ -95,18 +95,23 @@ def substitute(x, conv_layer, shuffle, neural_drop_rate, training):
     n_x = x.size(-1)
     n_conv = len(conv_layer)
 
-    x_out = list()
+    x_out = [0] * n_conv
+    if training:
+        rand_idx = torch.randperm(n_conv * n_x) % n_conv
+    else:
+        rand_idx = torch.arange(n_conv * n_x) % n_conv
+    p_idx = 0
+
     x = x.permute(4, 0, 1, 2, 3).flatten(0, 1)
     for conv in conv_layer:
-        x_out.append(conv(x))
+        _out = conv(x).unflatten(0, (n_x, n_batch))
 
-    x_out = torch.cat(x_out, dim=0).unflatten(0, (n_x * n_conv, n_batch))
+        for i, idx in enumerate(rand_idx[p_idx * n_x: (p_idx + 1) * n_x]):
+            x_out[idx] = x_out[idx] + _out[i]
+        p_idx = p_idx + 1
 
-    if training:
-        x_out = x_out[torch.randperm(x_out.size(0))]
-
-    x_out = x_out.unflatten(0, (n_conv, n_x))
-    return x_out.sum(1).permute(1, 2, 3, 4, 0)
+    x_out = torch.stack(x_out, dim=0)
+    return x_out.permute(1, 2, 3, 4, 0)
 
 
 class BNAndPadLayer(nn.Module):
