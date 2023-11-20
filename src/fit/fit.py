@@ -26,7 +26,7 @@ class Fit:
         self.double_valid = cfg.train.double_valid
         self.wandb = cfg.wandb
         self.start_epoch, self.num_epochs = epochs
-        self.logging_interval = 1
+        self.logging_interval = 50
         self.num_classes = cfg.dataset.num_classes
         self.tm = cfg.train.target_metric
         self.eval_metrics = cfg.train.eval_metrics
