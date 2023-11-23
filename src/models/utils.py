@@ -14,6 +14,7 @@ def activation_for_substitute(xs, x):
 
 
 def deploy(model):
+    model.eval()
     for name, module in model.named_modules():
         if hasattr(module, 're_parameterization'):
             module.re_parameterization()
