@@ -35,7 +35,7 @@ from timm.layers import PatchEmbed, Mlp, DropPath, PatchDropout, trunc_normal_, 
 from timm.models import named_apply, build_model_with_cfg
 
 from src.models.utils import deploy
-from src.models.blocks import SubMlp, SubMlpV2, SubMlpV3
+from src.models.blocks import SubMlp, SubMlpV2, SubMlpV3, SubMlpV4
 
 
 class Attention(nn.Module):
@@ -444,6 +444,7 @@ methods = {
     'SubMlp4': dict(mlp_layer=partial(SubMlp, n_blocks=4, N=14)),
     'SubMlpV2': dict(mlp_layer=partial(SubMlpV2, n_blocks=3, N=14)),
     'SubMlpV3': dict(mlp_layer=partial(SubMlpV3, n_blocks=3, N=14)),
+    'SubMlpV4': dict(mlp_layer=partial(SubMlpV4, n_blocks=3, N=14)),
 }
 
 
