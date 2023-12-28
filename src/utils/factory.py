@@ -10,7 +10,6 @@ from torch.nn import BCEWithLogitsLoss
 from src.models import SubResNet, AddResNet, SubMobileNet, AddMobileNet, SubDeit
 from src.models.mobileone import mobileone
 from src.models.mobileone_sub import mobileoneSub
-from src.models.resnet_sub_scriptable import SubResNetScript
 
 
 def create_model_cls(model_name, in_channels, num_classes, **kwargs):
@@ -80,7 +79,7 @@ class ObjectFactory:
         if 'cifar' in cfg.dataset.name:
             filter_bias_and_bn = False
         else:
-            filter_bias_and_bn = False # Only for our
+            filter_bias_and_bn = True  # Only for our is False until cifar
             # b, m = cfg.model.model_name.split('_') if '_' in cfg.model.model_name else (cfg.model.model_name, '')
             # filter_bias_and_bn = False if '1' in m or '3' in m else True
             # filter_bias_and_bn = False if 'mobile' in b else filter_bias_and_bn

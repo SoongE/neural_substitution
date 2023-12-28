@@ -9,7 +9,7 @@ from timm.models.layers import DropBlock2d, DropPath, create_attn, get_act_layer
     create_classifier
 
 from src.models.blocks import SubConvBNBlock, SubInceptionV1Block, SubInceptionV2Block, SubInceptionV3Block, \
-    SubInceptionV4Block, SubInceptionV5Block, SubInceptionV6Block, SubInceptionV7Block, SubInceptionV6BlockSimple
+    SubInceptionV4Block, SubInceptionV5Block, SubInceptionV6Block, SubInceptionV7Block
 from src.models.utils import activation_for_substitute
 
 
@@ -601,7 +601,6 @@ methods = {
     'SubInceptionV5': dict(sub_block=SubInceptionV5Block, n_block=5),
     'SubInceptionV5X4': dict(sub_block=partial(SubInceptionV5Block, ratio=4), n_block=5),
     'SubInceptionV6': dict(sub_block=SubInceptionV6Block, n_block=4),
-    'SubInceptionV6S': dict(sub_block=SubInceptionV6BlockSimple, n_block=4),
     'SubInceptionV7': dict(sub_block=SubInceptionV7Block, n_block=4),
     # 'SubInceptionV1in1': dict(sub_block=SubInceptionV1in1Block, n_block=3)
 }
