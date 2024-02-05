@@ -1,0 +1,43 @@
+defaults:
+  - config
+  - override train/optimizer: adamw
+  - _self_
+
+gpus: [0,1,2,3]
+name: ${model.model_name}
+
+info:
+  project: Neural_Substitution_Deit_ImageNet
+
+train:
+  epochs: 300
+  batch_size: 64 # total 4096
+  num_workers: 8
+
+  scheduler:
+    warmup_epochs: 30
+    warmup_lr: 1e-6
+    min_lr: 1e-5
+  
+  optimizer:
+    grad_accumulation: 16
+    lr: 3e-3
+    opt_eps: 1e-8
+    momentum: 0.9
+    weight_decay: 5e-2
+    clip_grad: 1.0
+
+model:
+  model_name: SubMaxViT
+  drop_path_rate: 0.2
+
+dataset:
+  augmentation:
+    mixup: 0.8
+    cutmix: 1.0
+    crop_pct: null
+    auto_aug: rand-m15-mstd0.5-inc1
+    train_interpolation: bicubic
+    re_prob: 0.25
+    smoothing: 0.1
+    color_jitter: 0.3
