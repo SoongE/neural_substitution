@@ -180,6 +180,10 @@ class BottleneckSub(nn.Module):
         self.dilation = dilation
         self.drop_path = drop_path
 
+        self.conv1.stochastic = False
+        self.conv2.stochastic = False
+        self.conv3.stochastic = True
+
         self.re_parameterized = False
 
     def zero_init_last(self):
@@ -613,6 +617,6 @@ def SubResNet(name, stochastic=1.0, pretrained=False, **kwargs):
 
 
 if __name__ == '__main__':
-    model = SubResNet('resnet18_SubInceptionV6', stem_type='imagenet', neural_drop_rate=0.1)
+    model = SubResNet('resnet18_SubInceptionV7', stem_type='imagenet', neural_drop_rate=0.1)
     input = torch.rand(2, 3, 224, 224)
     out = model(input)

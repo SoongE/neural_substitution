@@ -15,10 +15,10 @@ epoch_repeats: 0
 aug_repeats: 0
 aug_splits: 0
 
-reprob: 0
-remode: pixel
-recount: 1
-resplit: False
+re_prob: 0
+re_mode: pixel
+re_count: 1
+re_split: False
 
 mixup: 0
 cutmix: 1.0

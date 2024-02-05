@@ -7,7 +7,7 @@ from timm.utils import NativeScaler
 from torch import nn
 from torch.nn import BCEWithLogitsLoss
 
-from src.models import SubResNet, AddResNet, SubMobileNet, AddMobileNet, SubDeit
+from src.models import SubResNet, AddResNet, SubMobileNet, AddMobileNet, SubDeit, SubMaxViT
 from src.models.mobileone import mobileone
 from src.models.mobileone_sub import mobileoneSub
 
@@ -35,6 +35,8 @@ def create_model_cls(model_name, in_channels, num_classes, **kwargs):
             kwargs.update({'substitution': False})
     elif 'deit' in model_name:
         model_cls = SubDeit
+    elif 'max' in model_name:
+        model_cls = SubMaxViT
     else:
         raise NotImplementedError(f'{model_name} is not implemented')
     # return torch.jit.script(model_cls(model_name, **kwargs))

@@ -97,7 +97,7 @@ def substitute(x, conv_layer, shuffle, neural_drop_rate, training):
     n_conv = len(conv_layer)
 
     x_out = [0] * n_conv
-    if training:
+    if training and shuffle:
         rand_idx = torch.randperm(n_conv * n_x) % n_conv
     else:
         rand_idx = torch.arange(n_conv * n_x) % n_conv
@@ -670,7 +670,7 @@ class SubInceptionV5Block(nn.Module):
 
 class SubInceptionV6Block(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, bias=False, stochastic=1.0,
-                 bn=nn.BatchNorm2d, neural_drop_rate=0.0, n_block=0, ratio=1, **kwargs):
+                 bn=nn.BatchNorm2d, neural_drop_rate=0.0, groups=1, n_block=0, ratio=1, **kwargs):
         super().__init__()
         self.conv_args = {
             'in_channels': in_channels,
@@ -679,6 +679,7 @@ class SubInceptionV6Block(nn.Module):
             'stride': stride,
             'padding': padding,
             'bias': bias,
+            'groups':groups,
             **kwargs
         }
         hidden_channels1 = int(in_channels * 2)
@@ -700,31 +701,31 @@ class SubInceptionV6Block(nn.Module):
         # 1x1
         if self.need_pool:
             self.blocks.update({'1x1': nn.Sequential(
-                nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), bias=False, **kwargs),
+                nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), bias=False, groups=groups, **kwargs),
                 BNAndPadLayer(padding, out_channels),
                 nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
                 bn(out_channels),
             )})
         else:
             self.blocks.update({'1x1': nn.Sequential(
-                nn.Conv2d(in_channels, out_channels, (1, 1), bias=False, **kwargs),
+                nn.Conv2d(in_channels, out_channels, (1, 1), bias=False, groups=groups, **kwargs),
                 bn(out_channels),
             )})
 
         # ds
         self.blocks.update({'dsx2': nn.Sequential(
-            nn.Conv2d(in_channels, hidden_channels1, kernel_size=(1, 1), bias=False, groups=kwargs.get('groups', 1)),
+            nn.Conv2d(in_channels, hidden_channels1, kernel_size=(1, 1), bias=False, groups=groups),
             BNAndPadLayer(padding, hidden_channels1),
-            nn.Conv2d(hidden_channels1, out_channels, kernel_size=kernel_size, stride=stride, bias=False, **kwargs),
+            nn.Conv2d(hidden_channels1, out_channels, kernel_size=kernel_size, stride=stride, bias=False, groups=groups),
             bn(out_channels),
         )})
 
         # ds
         self.blocks.update({'dsx4': nn.Sequential(
-            nn.Conv2d(in_channels, hidden_channels2, kernel_size=(1, 1), bias=False, groups=kwargs.get('groups', 1)),
+            nn.Conv2d(in_channels, hidden_channels2, kernel_size=(1, 1), bias=False, groups=groups),
             BNAndPadLayer(padding, hidden_channels2),
             nn.Conv2d(hidden_channels2, out_channels, kernel_size=kernel_size, stride=stride, bias=False,
-                      groups=kwargs.get('groups', 1)),
+                      groups=groups),
             bn(out_channels),
         )})
 
@@ -764,7 +765,7 @@ class SubInceptionV6Block(nn.Module):
 
 
 class SubInceptionV7Block(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, bias=False, stochastic=1.0,
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, bias=False, stochastic=False,
                  bn=nn.BatchNorm2d, neural_drop_rate=0.0, n_block=0, ratio=1, **kwargs):
         super().__init__()
         self.conv_args = {
@@ -777,7 +778,7 @@ class SubInceptionV7Block(nn.Module):
             **kwargs
         }
         hidden_channels1 = int(in_channels * 2)
-        hidden_channels2 = int(in_channels * 4)
+        hidden_channels2 = int(in_channels * 2)
         self.conv_reparam = None
         self.stochastic = stochastic
         self.n_flow = 1
@@ -791,7 +792,7 @@ class SubInceptionV7Block(nn.Module):
             bn(out_channels),
         )})
 
-        self.blocks.update({'1x11': nn.Sequential(
+        self.blocks.update({'1x1': nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), stride=stride, bias=False, **kwargs),
             bn(out_channels),
         )})
@@ -809,7 +810,7 @@ class SubInceptionV7Block(nn.Module):
             self.blocks.update({'1x1': nn.Identity()})
 
         # ds
-        self.blocks.update({'dsx4': nn.Sequential(
+        self.blocks.update({'dsx2': nn.Sequential(
             nn.Conv2d(in_channels, hidden_channels2, kernel_size=(1, 1), bias=False, groups=kwargs.get('groups', 1)),
             BNAndPadLayer(padding, hidden_channels2),
             nn.Conv2d(hidden_channels2, out_channels, kernel_size=kernel_size, stride=stride, bias=False,
@@ -823,26 +824,19 @@ class SubInceptionV7Block(nn.Module):
 
         _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
 
-        if self.need_pool:
-            _k1, _b1 = fuse_bn(*self.blocks['1x1'][:2], self.n_flow)
-            _k11 = avg_to_kernel(self.conv_reparam.out_channels, self.conv_reparam.kernel_size,
-                                 self.conv_reparam.groups)
-            _k11, _b11 = fuse_bn(_k11.to(self.blocks['1x1'][0].weight.device), self.blocks['1x1'][3], self.n_flow)
-            _k1, _b1 = merge_1x1_kxk(_k1, _b1, _k11, _b11, self.conv_reparam.groups)
-        else:
-            _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
-            _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
+        _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
+        _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
 
         _k3, _b3 = fuse_bn(*self.blocks['dsx2'][:2], self.n_flow)
         _k33, _b33 = fuse_bn(*self.blocks['dsx2'][2:], self.n_flow)
         _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33, self.conv_args.get('groups', 1))
 
-        _k4, _b4 = fuse_bn(*self.blocks['dsx4'][:2], self.n_flow)
-        _k44, _b44 = fuse_bn(*self.blocks['dsx4'][2:], self.n_flow)
-        _k4, _b4 = merge_1x1_kxk(_k4, _b4, _k44, _b44, self.conv_args.get('groups', 1))
+        # _k4, _b4 = fuse_bn(*self.blocks['dsx4'][:2], self.n_flow)
+        # _k44, _b44 = fuse_bn(*self.blocks['dsx4'][2:], self.n_flow)
+        # _k4, _b4 = merge_1x1_kxk(_k4, _b4, _k44, _b44, self.conv_args.get('groups', 1))
 
-        self.conv_reparam.weight.data = sum([_k0, _k1, _k3, _k4])
-        self.conv_reparam.bias.data = sum([_b0, _b1, _b3, _b4])
+        self.conv_reparam.weight.data = sum([_k0, _k3, _k1])
+        self.conv_reparam.bias.data = sum([_b0, _b3, _b1])
         self.__delattr__('blocks')
 
     def forward(self, x):
@@ -1506,6 +1500,129 @@ class SubMlpV5(nn.Module):
         self.__delattr__('fc_list1')
         self.__delattr__('conv_list2')
         self.__delattr__('fc_list2')
+
+
+class AddMlpV5(nn.Module):
+    def __init__(
+            self,
+            in_features,
+            hidden_features=None,
+            out_features=None,
+            n_blocks=3,
+            N=14,
+    ):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features or in_features
+        self.hidden_features = int(in_features * 4)
+        self.n_blocks = n_blocks
+        self.N = N
+        self.conv_args = {
+            'kernel_size': (3, 3),
+            'stride': 1,
+            'padding': 1,
+            'bias': False,
+        }
+
+        self.conv1 = None
+        self.fc1 = None
+        self.fc2 = None
+
+        self.act = nn.ReLU(inplace=True)
+
+        self.conv_list1 = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(self.in_features, self.in_features, groups=self.in_features, **self.conv_args),
+                nn.BatchNorm2d(self.in_features),
+            ),
+            nn.Sequential(
+                nn.Conv2d(self.in_features, self.in_features, 1, 1, 0, groups=self.in_features, bias=False),
+                nn.BatchNorm2d(self.in_features),
+            ),
+            nn.Identity(),
+        ])
+        self.fc_list1 = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(self.in_features, self.hidden_features, 1, 1, 0, bias=False),
+                nn.BatchNorm2d(self.hidden_features),
+            ) for _ in range(n_blocks)
+        ])
+        self.fc_list2 = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(self.hidden_features, self.in_features, 1, 1, 0, bias=False),
+                nn.BatchNorm2d(self.in_features),
+            ) for _ in range(n_blocks)
+        ])
+
+    def forward(self, x):
+        x = rearrange(x, 'b (n1 n2) c -> b c n1 n2', n1=self.N, n2=self.N)
+        if self.conv1:
+            x = self.act(self.conv1(x))
+            x = self.act(self.fc1(x))
+            out = self.fc2(x)
+        else:
+            x = self.adding(x, self.conv_list1)
+            x = self.act(x)
+            x = self.adding(x, self.fc_list1)
+            x = self.act(x)
+            out = self.adding(x, self.fc_list2)
+
+        return rearrange(out, 'b c n1 n2 -> b (n1 n2) c')
+
+    def adding(self, x, fc_layer):
+        x_out = 0
+
+        for fc in fc_layer:
+            x_out = x_out + fc(x)
+
+        return x_out
+
+
+class ConvMlpV5(nn.Module):
+    def __init__(
+            self,
+            in_features,
+            hidden_features=None,
+            out_features=None,
+            n_blocks=3,
+            N=14,
+    ):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features or in_features
+        self.hidden_features = int(in_features * 4)
+        self.n_blocks = n_blocks
+        self.N = N
+        self.conv_args = {
+            'kernel_size': (3, 3),
+            'stride': 1,
+            'padding': 1,
+            'bias': False,
+        }
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(self.in_features, self.in_features, groups=self.in_features, **self.conv_args),
+            nn.BatchNorm2d(self.in_features),
+        )
+        self.fc1 = nn.Sequential(
+            nn.Conv2d(self.in_features, self.hidden_features, 1, 1, 0, bias=False),
+            nn.BatchNorm2d(self.hidden_features),
+        )
+        self.fc2 = nn.Sequential(
+            nn.Conv2d(self.hidden_features, self.in_features, 1, 1, 0, bias=False),
+            nn.BatchNorm2d(self.in_features),
+        )
+
+        self.act = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        x = rearrange(x, 'b (n1 n2) c -> b c n1 n2', n1=self.N, n2=self.N)
+
+        x = self.act(self.conv1(x))
+        x = self.act(self.fc1(x))
+        out = self.fc2(x)
+
+        return rearrange(out, 'b c n1 n2 -> b (n1 n2) c')
 
 
 # For FC

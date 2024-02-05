@@ -71,10 +71,10 @@ class Fit:
                         _ = self.validate(epoch, ema=False)
                 else:
                     eval_metrics = self.validate(epoch, ema=False)
-            else:
-                if eval_metrics is None:
-                    self._reset_metric()
-                    eval_metrics = self._metrics()
+
+            if eval_metrics is None:
+                self._reset_metric()
+                eval_metrics = self._metrics()
 
             # save proper checkpoint with eval metric
             if self._master_node:

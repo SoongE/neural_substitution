@@ -5,3 +5,4 @@ from src.models.mobileone import mobileone
 from src.models.resnet import AddResNet
 from src.models.resnet_sub import SubResNet
 from src.models.utils import deploy
+from src.models.maxvit import SubMaxViT

@@ -3,9 +3,13 @@ windows:
   - window_name: window
     layout: tiled
     panes:
-      - python main.py -m --config-name=sub_cifar2 gpus=[0] wandb=True model.model_name=resnet18_SubInceptionV1
-      - python main.py -m --config-name=sub_cifar2 gpus=[1] wandb=True model.model_name=resnet50,resnet50_SubInceptionV1,resnet50_SubInceptionV2,resnet50_SubInceptionV3,resnet50_AddInceptionV1,resnet50_AddInceptionV2,resnet50_AddInceptionV3
-      - python main.py -m --config-name=sub_cifar2 gpus=[2] wandb=True model.model_name=resnext50,resnext50_SubInceptionV1,resnext50_SubInceptionV2,resnext50_SubInceptionV3,resnext50_AddInceptionV1,resnext50_AddInceptionV2,resnext50_AddInceptionV3
-      - python main.py -m --config-name=sub_cifar2 gpus=[3] wandb=True model.model_name=resnext50,resnext50_SubInceptionV1,resnext50_SubInceptionV2,resnext50_SubInceptionV3,resnext50_AddInceptionV1,resnext50_AddInceptionV2,resnext50_AddInceptionV3
+#      - CUDA_VISIBLE_DEVICES=0,1,2,3 torun main.py --config-name=sub_cifar gpus='[0,1,2,3]' wandb=True model.model_name=resnext50_SubInceptionV6 train.batch_size=32 train.optimizer.grad_accumulation=16
+#      - CUDA_VISIBLE_DEVICES=4,5,6,7 torun main.py --config-name=sub_cifar gpus='[4,5,6,7]' wandb=True model.model_name=resnet50_SubInceptionV6 train.batch_size=64 train.optimizer.grad_accumulation=8
+#      - CUDA_VISIBLE_DEVICES=6 python main.py --config-name=sub_cifar gpus=6 wandb=True model.model_name=resnet18_SubInceptionV7 train.batch_size=128 train.optimizer.grad_accumulation=16
+      - CUDA_VISIBLE_DEVICES=2 python main.py --config-name=sub_cifar gpus=2 wandb=True model.model_name=mobilenet_SubInceptionV6 train.optimizer.grad_accumulation=1 dataset.augmentation.smoothing=0.1 train.lr_scheduler.min_lr=5e-5 train.lr_scheduler.warmup_lr=1e-4
+      - CUDA_VISIBLE_DEVICES=8,9 torun main.py --config-name=sub_cifar gpus='[8,9]' wandb=True model.model_name=mobileone_SubInceptionV6 train.batch_size=128 train.optimizer.grad_accumulation=1 dataset.augmentation.smoothing=0.1 train.lr_scheduler.min_lr=5e-5 train.lr_scheduler.warmup_lr=1e-4
 
+#      - python main.py -m --config-name=sub_cifar gpus=[1] wandb=True model.model_name=resnet50,resnet50_SubInceptionV1,resnet50_SubInceptionV2,resnet50_SubInceptionV3,resnet50_AddInceptionV1,resnet50_AddInceptionV2,resnet50_AddInceptionV3
+#      - python main.py -m --config-name=sub_cifar gpus=[2] wandb=True model.model_name=resnext50,resnext50_SubInceptionV1,resnext50_SubInceptionV2,resnext50_SubInceptionV3,resnext50_AddInceptionV1,resnext50_AddInceptionV2,resnext50_AddInceptionV3
+#      - python main.py -m --config-name=sub_cifar gpus=[3] wandb=True model.model_name=resnext50,resnext50_SubInceptionV1,resnext50_SubInceptionV2,resnext50_SubInceptionV3,resnext50_AddInceptionV1,resnext50_AddInceptionV2,resnext50_AddInceptionV3
 #      - python main.py -m --config-name=sub_cifar2 gpus=[7] wandb=True model.model_name=mobileone,mobileone_SubInceptionV1,mobileone_SubInceptionV2,mobileone_SubfInceptionV3,mobileone_AddInceptionV1,mobileone_AddInceptionV2,mobileone_AddInceptionV3
