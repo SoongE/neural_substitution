@@ -38,7 +38,6 @@ import math
 from abc import abstractmethod
 from functools import partial
 from typing import Optional, Tuple
-import torch
 
 from dataclasses import dataclass
 from timm.layers import DropPath, get_norm_act_layer
@@ -48,6 +47,7 @@ from timm.layers import trunc_normal_tf_, make_divisible
 from timm.layers.padding import get_padding_value
 from timm.models import named_apply
 from torch import nn
+import torch
 
 from src.models.blocks import fuse_bn, get_equivalent_kernel_bias, expend_kernel, merge_1x1_kxk, BNAndPadLayer
 
@@ -361,13 +361,252 @@ class SubMbConvBlockV7(nn.Module):
 
         self.se = create_attn(cfg.attn_layer, mid_chs, **attn_kwargs)
 
-        self.conv3_1x1 = SubInceptionV7Block(mid_chs, out_chs, 1, bias=False, )
+        self.conv3_1x1 = SubInceptionV7Block(mid_chs, out_chs, 1, bias=False)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.is_deploy = False
 
-        self.down.stochastic=False
-        self.conv1_1x1=False
-        self.conv2_kxk=False
+    def init_weights(self, scheme=''):
+        named_apply(partial(_init_conv, scheme=scheme), self)
+
+    def forward(self, x):
+        if self.is_deploy:
+            return self.deploy_forward(x)
+
+        x = x.unsqueeze(-1)
+        shortcut = self.shortcut(x)
+        x = self.pre_norm(x.squeeze(-1))
+        x = self.down(x.unsqueeze(-1))
+
+        # 1x1 expansion conv & norm-act
+        x = self.conv1_1x1(x)
+        x = activation_for_substitution(x)
+
+        # depthwise / grouped 3x3 conv w/ SE (or other) channel attention & norm-act
+        x = self.conv2_kxk(x)
+        x = activation_for_substitution(x)
+
+        if self.se is not None:
+            x = x.sum(-1)
+            x = self.se(x)
+            x = x.unsqueeze(-1)
+
+        # 1x1 linear projection to output width
+        x = self.conv3_1x1(x)
+
+        if shortcut.size()[-1] == 1:
+            shortcut = (shortcut / x.size(-1)).repeat(1, 1, 1, 1, x.size(-1))
+
+        x = self.drop_path(x) + shortcut
+        return x.sum(-1)
+
+    def deploy_forward(self, x):
+        shortcut = self.shortcut(x)
+        x = self.pre_norm(x)
+        x = self.down(x)
+
+        # 1x1 expansion conv & norm-act
+        x = self.conv1_1x1(x)
+        x = torch.nn.functional.relu(x)
+
+        # depthwise / grouped 3x3 conv w/ SE (or other) channel attention & norm-act
+        x = self.conv2_kxk(x)
+        x = torch.nn.functional.relu(x)
+
+        if self.se is not None:
+            x = self.se(x)
+
+        # 1x1 linear projection to output width
+        x = self.conv3_1x1(x)
+        x = self.drop_path(x) + shortcut
+        return x
+
+    def re_parameterization(self):
+        self.is_deploy = True
+
+
+class SubMbConvBlockV8(nn.Module):
+    """ Pre-Norm Conv Block - 1x1 - kxk - 1x1, w/ inverted bottleneck (expand)
+    """
+
+    def __init__(
+            self,
+            in_chs: int,
+            out_chs: int,
+            stride: int = 1,
+            dilation: Tuple[int, int] = (1, 1),
+            cfg: MaxxVitConvCfg = MaxxVitConvCfg(),
+            drop_path: float = 0.,
+            n: int = 4,
+    ):
+        super(SubMbConvBlockV8, self).__init__()
+        norm_act_layer = partial(get_norm_act_layer(cfg.norm_layer, cfg.act_layer), eps=cfg.norm_eps)
+        mid_chs = make_divisible((out_chs if cfg.expand_output else in_chs) * cfg.expand_ratio)
+        groups = num_groups(cfg.group_size, mid_chs)
+        self.n = n
+
+        if stride == 2:
+            self.shortcut = SubDownsample2d(
+                in_chs, out_chs, pool_type=cfg.pool_type, bias=cfg.output_bias, padding=cfg.padding, n=n)
+        else:
+            self.shortcut = nn.Identity()
+
+        assert cfg.stride_mode in ('pool', '1x1', 'dw')
+        stride_pool, stride_1, stride_2 = 1, 1, 1
+        if cfg.stride_mode == 'pool':
+            # NOTE this is not described in paper, experiment to find faster option that doesn't stride in 1x1
+            stride_pool, dilation_2 = stride, dilation[1]
+            # FIXME handle dilation of avg pool
+        elif cfg.stride_mode == '1x1':
+            # NOTE I don't like this option described in paper, 1x1 w/ stride throws info away
+            stride_1, dilation_2 = stride, dilation[1]
+        else:
+            stride_2, dilation_2 = stride, dilation[0]
+
+        # self.pre_norm = SubBatchNorm2d(in_chs, n)
+        # norm_act_layer = partial(get_norm_act_layer(cfg.norm_layer, cfg.act_layer), eps=cfg.norm_eps)
+        self.pre_norm = norm_act_layer(in_chs, apply_act=cfg.pre_norm_act)
+        if stride_pool > 1:
+            self.down = SubDownsample2d(in_chs, in_chs, pool_type=cfg.downsample_pool_type, padding=cfg.padding, n=n)
+        else:
+            self.down = nn.Identity()
+        self.conv1_1x1 = SubInceptionV8Block(in_chs, mid_chs, 1, stride=stride_1)
+
+        padding, _ = get_padding_value(cfg.padding, cfg.kernel_size)
+        self.conv2_kxk = SubInceptionV8Block(mid_chs, mid_chs, cfg.kernel_size, stride=stride_2, dilation=dilation_2,
+                                             groups=groups, padding=padding)
+
+        attn_kwargs = {}
+        if isinstance(cfg.attn_layer, str):
+            if cfg.attn_layer == 'se' or cfg.attn_layer == 'eca':
+                attn_kwargs['act_layer'] = cfg.attn_act_layer
+                attn_kwargs['rd_channels'] = int(cfg.attn_ratio * (out_chs if cfg.expand_output else mid_chs))
+
+        self.se = create_attn(cfg.attn_layer, mid_chs, **attn_kwargs)
+
+        self.conv3_1x1 = SubInceptionV8Block(mid_chs, out_chs, 1, bias=False)
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.is_deploy = False
+
+    def init_weights(self, scheme=''):
+        named_apply(partial(_init_conv, scheme=scheme), self)
+
+    def forward(self, x):
+        if self.is_deploy:
+            return self.deploy_forward(x)
+
+        x = x.unsqueeze(-1)
+        shortcut = self.shortcut(x)
+        x = self.pre_norm(x.squeeze(-1))
+        x = self.down(x.unsqueeze(-1))
+
+        # 1x1 expansion conv & norm-act
+        x = self.conv1_1x1(x)
+        x = activation_for_substitution(x)
+
+        # depthwise / grouped 3x3 conv w/ SE (or other) channel attention & norm-act
+        x = self.conv2_kxk(x)
+        x = activation_for_substitution(x)
+
+        if self.se is not None:
+            x = x.sum(-1)
+            x = self.se(x)
+            x = x.unsqueeze(-1)
+
+        # 1x1 linear projection to output width
+        x = self.conv3_1x1(x)
+
+        if shortcut.size()[-1] == 1:
+            shortcut = (shortcut / x.size(-1)).repeat(1, 1, 1, 1, x.size(-1))
+
+        x = self.drop_path(x) + shortcut
+        return x.sum(-1)
+
+    def deploy_forward(self, x):
+        shortcut = self.shortcut(x)
+        x = self.pre_norm(x)
+        x = self.down(x)
+
+        # 1x1 expansion conv & norm-act
+        x = self.conv1_1x1(x)
+        x = torch.nn.functional.relu(x)
+
+        # depthwise / grouped 3x3 conv w/ SE (or other) channel attention & norm-act
+        x = self.conv2_kxk(x)
+        x = torch.nn.functional.relu(x)
+
+        if self.se is not None:
+            x = self.se(x)
+
+        # 1x1 linear projection to output width
+        x = self.conv3_1x1(x)
+        x = self.drop_path(x) + shortcut
+        return x
+
+    def re_parameterization(self):
+        self.is_deploy = True
+
+class SubMbConvBlockV9(nn.Module):
+    """ Pre-Norm Conv Block - 1x1 - kxk - 1x1, w/ inverted bottleneck (expand)
+    """
+
+    def __init__(
+            self,
+            in_chs: int,
+            out_chs: int,
+            stride: int = 1,
+            dilation: Tuple[int, int] = (1, 1),
+            cfg: MaxxVitConvCfg = MaxxVitConvCfg(),
+            drop_path: float = 0.,
+            n: int = 4,
+    ):
+        super(SubMbConvBlockV9, self).__init__()
+        norm_act_layer = partial(get_norm_act_layer(cfg.norm_layer, cfg.act_layer), eps=cfg.norm_eps)
+        mid_chs = make_divisible((out_chs if cfg.expand_output else in_chs) * cfg.expand_ratio)
+        groups = num_groups(cfg.group_size, mid_chs)
+        self.n = n
+
+        if stride == 2:
+            self.shortcut = SubDownsample2d(
+                in_chs, out_chs, pool_type=cfg.pool_type, bias=cfg.output_bias, padding=cfg.padding, n=n)
+        else:
+            self.shortcut = nn.Identity()
+
+        assert cfg.stride_mode in ('pool', '1x1', 'dw')
+        stride_pool, stride_1, stride_2 = 1, 1, 1
+        if cfg.stride_mode == 'pool':
+            # NOTE this is not described in paper, experiment to find faster option that doesn't stride in 1x1
+            stride_pool, dilation_2 = stride, dilation[1]
+            # FIXME handle dilation of avg pool
+        elif cfg.stride_mode == '1x1':
+            # NOTE I don't like this option described in paper, 1x1 w/ stride throws info away
+            stride_1, dilation_2 = stride, dilation[1]
+        else:
+            stride_2, dilation_2 = stride, dilation[0]
+
+        # self.pre_norm = SubBatchNorm2d(in_chs, n)
+        # norm_act_layer = partial(get_norm_act_layer(cfg.norm_layer, cfg.act_layer), eps=cfg.norm_eps)
+        self.pre_norm = norm_act_layer(in_chs, apply_act=cfg.pre_norm_act)
+        if stride_pool > 1:
+            self.down = SubDownsample2d(in_chs, in_chs, pool_type=cfg.downsample_pool_type, padding=cfg.padding, n=n)
+        else:
+            self.down = nn.Identity()
+        self.conv1_1x1 = SubInceptionV9Block(in_chs, mid_chs, 1, stride=stride_1)
+
+        padding, _ = get_padding_value(cfg.padding, cfg.kernel_size)
+        self.conv2_kxk = SubInceptionV9Block(mid_chs, mid_chs, cfg.kernel_size, stride=stride_2, dilation=dilation_2,
+                                             groups=groups, padding=padding)
+
+        attn_kwargs = {}
+        if isinstance(cfg.attn_layer, str):
+            if cfg.attn_layer == 'se' or cfg.attn_layer == 'eca':
+                attn_kwargs['act_layer'] = cfg.attn_act_layer
+                attn_kwargs['rd_channels'] = int(cfg.attn_ratio * (out_chs if cfg.expand_output else mid_chs))
+
+        self.se = create_attn(cfg.attn_layer, mid_chs, **attn_kwargs)
+
+        self.conv3_1x1 = SubInceptionV9Block(mid_chs, out_chs, 1, bias=False)
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.is_deploy = False
 
     def init_weights(self, scheme=''):
         named_apply(partial(_init_conv, scheme=scheme), self)
@@ -619,6 +858,154 @@ class SubInceptionV7Block(_SubstitutionABC):
 
         self.deploy_blocks.weight.data = sum([_k0, _k3, _k1])
         self.deploy_blocks.bias.data = sum([_b0, _b3, _b1])
+        self._is_deploy = True
+        self.__delattr__('blocks')
+
+
+class SubInceptionV8Block(_SubstitutionABC):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, bias=False, bn=nn.BatchNorm2d,
+                 **kwargs):
+        super().__init__()
+        self.conv_args = {
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            'kernel_size': kernel_size,
+            'stride': stride,
+            'padding': padding,
+            'bias': bias,
+            **kwargs
+        }
+        hidden_channels = int(in_channels * 2)
+        self.blocks = nn.ModuleDict()
+
+        # kxk
+        self.blocks.update({'kxk': nn.Sequential(
+            nn.Conv2d(**self.conv_args),
+            bn(out_channels),
+        )})
+
+        self.blocks.update({'1x1': nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), stride=stride, bias=False, **kwargs),
+            bn(out_channels),
+        )})
+
+        self.need_pool = False if stride == 1 else True
+        # 1x1
+        if self.need_pool:
+            self.blocks.update({'1x12': nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), bias=False, **kwargs),
+                BNAndPadLayer(padding, out_channels),
+                nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
+                bn(out_channels),
+            )})
+        elif in_channels != out_channels:
+            self.blocks.update({'1x12': nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), stride=stride, bias=False,
+                          groups=kwargs.get('groups', 1)),
+                bn(out_channels),
+            )})
+        else:
+            self.blocks.update({'1x12': bn(out_channels)})
+
+        # ds
+        self.blocks.update({'dsx2': nn.Sequential(
+            nn.Conv2d(in_channels, hidden_channels, kernel_size=(1, 1), bias=False, groups=kwargs.get('groups', 1)),
+            BNAndPadLayer(padding, hidden_channels),
+            nn.Conv2d(hidden_channels, out_channels, kernel_size=kernel_size, stride=stride, bias=False,
+                      groups=kwargs.get('groups', 1)),
+            bn(out_channels),
+        )})
+
+    def re_parameterization(self):
+        self.conv_args['bias'] = True
+        self.deploy_blocks = nn.Conv2d(**self.conv_args)
+
+        _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
+
+        _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
+        _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
+
+        _k3, _b3 = fuse_bn(*self.blocks['dsx2'][:2], self.n_flow)
+        _k33, _b33 = fuse_bn(*self.blocks['dsx2'][2:], self.n_flow)
+        _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33, self.conv_args.get('groups', 1))
+
+        self.deploy_blocks.weight.data = sum([_k0, _k3, _k1])
+        self.deploy_blocks.bias.data = sum([_b0, _b3, _b1])
+        self._is_deploy = True
+        self.__delattr__('blocks')
+
+
+class SubInceptionV9Block(_SubstitutionABC):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, bias=False, bn=nn.BatchNorm2d,
+                 **kwargs):
+        super().__init__()
+        self.conv_args = {
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            'kernel_size': kernel_size,
+            'stride': stride,
+            'padding': padding,
+            'bias': bias,
+            **kwargs
+        }
+        # print(kwargs.get('groups', 1), in_channels, out_channels, kernel_size, stride, padding)
+        hidden_channels1 = int(in_channels * 2)
+        hidden_channels2 = int(in_channels * 2)
+        self.conv_reparam = None
+        self.n_flow = 1
+
+        self.blocks = nn.ModuleDict()
+
+        # kxk
+        self.blocks.update({'kxk': nn.Sequential(
+            nn.Conv2d(**self.conv_args),
+            bn(out_channels),
+        )})
+
+        _padding = (1 // 2, 3 // 2)
+        # 1x3
+        self.blocks.update({'1x3': nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=(1, 3), bias=False, stride=stride, padding=_padding,
+                      **kwargs),
+            bn(out_channels),
+        )})
+
+        _padding = (3 // 2, 1 // 2)
+        # 3x1
+        self.blocks.update({'3x1': nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=(3, 1), bias=False, stride=stride, padding=_padding,
+                      **kwargs),
+            bn(out_channels),
+        )})
+
+        # # ds
+        self.blocks.update({'dsx2': nn.Sequential(
+            nn.Conv2d(in_channels, hidden_channels2, kernel_size=(1, 1), bias=False, groups=kwargs.get('groups', 1)),
+            BNAndPadLayer(padding, hidden_channels2),
+            nn.Conv2d(hidden_channels2, out_channels, kernel_size=kernel_size, stride=stride, bias=False,
+                      groups=kwargs.get('groups', 1)),
+            bn(out_channels),
+        )})
+
+    def re_parameterization(self):
+        self.conv_args['bias'] = True
+        self.deploy_blocks = nn.Conv2d(**self.conv_args)
+
+        # _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
+        #
+        # _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
+        # _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
+        #
+        # _k4, _b4 = fuse_bn(*self.blocks['dsx1'][:2], self.n_flow)
+        # _k44, _b44 = fuse_bn(*self.blocks['dsx1'][2:], self.n_flow)
+        # _k4, _b4 = merge_1x1_kxk(_k4, _b4, _k44, _b44, self.conv_args.get('groups', 1))
+        #
+        # _k3, _b3 = fuse_bn(*self.blocks['dsx2'][:2], self.n_flow)
+        # _k33, _b33 = fuse_bn(*self.blocks['dsx2'][2:], self.n_flow)
+        # _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33, self.conv_args.get('groups', 1))
+        #
+        # self.deploy_blocks.weight.data = sum([_k0, _k3, _k4, _k1])
+        # self.deploy_blocks.bias.data = sum([_b0, _b3, _b4, _b1])
         self._is_deploy = True
         self.__delattr__('blocks')
 

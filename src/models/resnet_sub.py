@@ -9,7 +9,8 @@ from timm.models.layers import DropBlock2d, DropPath, create_attn, get_act_layer
     create_classifier
 
 from src.models.blocks import SubConvBNBlock, SubInceptionV1Block, SubInceptionV2Block, SubInceptionV3Block, \
-    SubInceptionV4Block, SubInceptionV5Block, SubInceptionV6Block, SubInceptionV7Block
+    SubInceptionV4Block, SubInceptionV5Block, SubInceptionV6Block, SubInceptionV7Block, SubInceptionV8Block, \
+    SubInceptionV9Block
 from src.models.utils import activation_for_substitute
 
 
@@ -179,10 +180,6 @@ class BottleneckSub(nn.Module):
         self.stride = stride
         self.dilation = dilation
         self.drop_path = drop_path
-
-        self.conv1.stochastic = False
-        self.conv2.stochastic = False
-        self.conv3.stochastic = True
 
         self.re_parameterized = False
 
@@ -606,6 +603,8 @@ methods = {
     'SubInceptionV5X4': dict(sub_block=partial(SubInceptionV5Block, ratio=4), n_block=5),
     'SubInceptionV6': dict(sub_block=SubInceptionV6Block, n_block=4),
     'SubInceptionV7': dict(sub_block=SubInceptionV7Block, n_block=4),
+    'SubInceptionV8': dict(sub_block=SubInceptionV8Block, n_block=4),
+    'SubInceptionV9': dict(sub_block=SubInceptionV9Block, n_block=4),
     # 'SubInceptionV1in1': dict(sub_block=SubInceptionV1in1Block, n_block=3)
 }
 

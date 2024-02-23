@@ -55,7 +55,7 @@ from torch.jit import Final
 
 __all__ = ['MaxxVitCfg', 'MaxxVitConvCfg', 'MaxxVitTransformerCfg', 'MaxxVit']
 
-from src.models.blocks_for_max_sub import SubMbConvBlock, SubMbConvBlockV7
+from src.models.blocks_for_max_sub import SubMbConvBlock, SubMbConvBlockV7, SubMbConvBlockV8, SubMbConvBlockV9
 
 
 @dataclass
@@ -1533,6 +1533,8 @@ methods = {
     'origin': dict(block_fn=MbConvBlock),
     'Sub': dict(block_fn=SubMbConvBlock),
     'SubV7': dict(block_fn=SubMbConvBlockV7),
+    'SubV8': dict(block_fn=SubMbConvBlockV8),
+    'SubV9': dict(block_fn=SubMbConvBlockV9),
 }
 
 
@@ -1628,7 +1630,7 @@ def count_parameters(model):
 if __name__ == '__main__':
     import torch
 
-    model = SubMaxViT('maxTiny_SubV7')
+    model = SubMaxViT('maxTiny_SubV9')
     model.eval()
 
     x = torch.rand(2, 3, 224, 224)
