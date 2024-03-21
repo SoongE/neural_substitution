@@ -617,6 +617,6 @@ def SubResNet(name, stochastic=1.0, pretrained=False, **kwargs):
 
 
 if __name__ == '__main__':
-    model = SubResNet('resnet50_SubInceptionV9', stem_type='imagenet', neural_drop_rate=0.3, drop_path_rate=0.3)
+    model = SubResNet('resnet18_SubInceptionV9', stem_type='imagenet', neural_drop_rate=0.3, drop_path_rate=0.3)
     input = torch.rand(2, 3, 224, 224)
     out = model(input)

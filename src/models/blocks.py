@@ -972,10 +972,18 @@ class SubInceptionV9Block(nn.Module):
         )})
 
         # ds
-        self.blocks.update({'dsx1': nn.Sequential(
-            BNAndPadLayer(padding, in_channels),
-            nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
-        )})
+        self.downsample = (in_channels != out_channels)
+        if self.downsample:
+            self.blocks.update({'dsx1': nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), stride=1, bias=False, **kwargs),
+                BNAndPadLayer(padding, out_channels),
+                nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
+            )})
+        else:
+            self.blocks.update({'dsx1': nn.Sequential(
+                BNAndPadLayer(padding, out_channels),
+                nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
+            )})
 
         # ds
         self.blocks.update({'dsx2': nn.Sequential(
@@ -995,8 +1003,14 @@ class SubInceptionV9Block(nn.Module):
         _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
         _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
 
-        _k22 = avg_to_kernel(self.conv_reparam.out_channels, self.conv_reparam.kernel_size, self.conv_reparam.groups)
-        _k2,_b2 = fuse_bn(_k22.to(self.conv_reparam.weight.device), self.blocks['dsx1'][0], self.n_flow)
+        if self.downsample:
+            _k2, _b2 = fuse_bn(*self.blocks['dsx1'][:2], self.n_flow)
+            _k22 = avg_to_kernel(self.conv_reparam.out_channels, self.conv_reparam.kernel_size,
+                                 self.conv_reparam.groups).to(self.blocks['dsx1'][0].weight.device)
+            _k2, _b2 = merge_1x1_kxk(_k2, _b2, _k22, 0, self.conv_reparam.groups)
+        else:
+            _k22 = avg_to_kernel(self.conv_reparam.out_channels, self.conv_reparam.kernel_size, self.conv_reparam.groups)
+            _k2,_b2 = fuse_bn(_k22.to(self.conv_reparam.weight.device), self.blocks['dsx1'][0], self.n_flow)
 
         _k3, _b3 = fuse_bn(*self.blocks['dsx2'][:2], self.n_flow)
         _k33, _b33 = fuse_bn(*self.blocks['dsx2'][2:], self.n_flow)
