@@ -14,8 +14,8 @@ from src.utils.metadata import count_parameters
 if __name__ == '__main__':
     # backbones = ['resnet18', 'resnet34', 'resnet50', 'mobilenet', 'mobileone']
     # methods = ['AddInceptionV1', 'AddInceptionV2', 'AddInceptionV3', 'SubInceptionV1', 'SubInceptionV2', 'SubInceptionV3']
-    backbones = ['mobileone']
-    methods = ['SubInceptionV6']
+    backbones = ['resnet50']
+    methods = ['SubInceptionV9']
 
     kwargs = {}
     for b_name in backbones:
@@ -36,13 +36,11 @@ if __name__ == '__main__':
                 model_class = SubDeit
 
             name = f'{b_name}_{m_name}'
-            # default_model = AddMobileNet(f'{b_name}_origin')
-            default_model = mobileone('')
-            default_model.eval()
+            default_model = AddResNet(f'{b_name}_origin')
 
             default_param = count_parameters(default_model)
 
-            model = model_class(name, stochastic=1.0, neural_drop_rate=0.0, **kwargs)
+            model = model_class(name, stochastic=True, neural_drop_rate=0.4, **kwargs)
             model.init_weights(bn_init=True)
             input = torch.rand(12, 3, 224, 224)
             s = time.time()

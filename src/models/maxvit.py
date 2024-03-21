@@ -49,8 +49,7 @@ from timm.layers import Mlp, DropPath, use_fused_attn, \
 from timm.layers import RelPosMlp, RelPosBias, RelPosBiasTf, resize_rel_pos_bias_table
 from timm.layers import create_attn, get_norm_layer, get_norm_act_layer, create_conv2d, create_pool2d
 from timm.layers import trunc_normal_tf_, to_2tuple, extend_tuple, make_divisible, _assert
-from timm.models import named_apply, build_model_with_cfg, register_notrace_function, checkpoint_seq, \
-    register_model
+from timm.models import named_apply, build_model_with_cfg, register_notrace_function, checkpoint_seq
 from torch.jit import Final
 
 __all__ = ['MaxxVitCfg', 'MaxxVitConvCfg', 'MaxxVitTransformerCfg', 'MaxxVit']
@@ -1549,83 +1548,9 @@ def SubMaxViT(name, pretrained=False, **kwargs):
     return _create_maxxvit(**model_args, pretrained=pretrained)
 
 
-@register_model
-def maxvit_tiny_tf_224(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_tiny_tf_224', 'maxvit_tiny_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_tiny_tf_384(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_tiny_tf_384', 'maxvit_tiny_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_tiny_tf_512(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_tiny_tf_512', 'maxvit_tiny_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_small_tf_224(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_small_tf_224', 'maxvit_small_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_small_tf_384(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_small_tf_384', 'maxvit_small_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_small_tf_512(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_small_tf_512', 'maxvit_small_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_base_tf_224(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_base_tf_224', 'maxvit_base_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_base_tf_384(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_base_tf_384', 'maxvit_base_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_base_tf_512(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_base_tf_512', 'maxvit_base_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_large_tf_224(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_large_tf_224', 'maxvit_large_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_large_tf_384(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_large_tf_384', 'maxvit_large_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_large_tf_512(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_large_tf_512', 'maxvit_large_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_xlarge_tf_224(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_xlarge_tf_224', 'maxvit_xlarge_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_xlarge_tf_384(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_xlarge_tf_384', 'maxvit_xlarge_tf', pretrained=pretrained, **kwargs)
-
-
-@register_model
-def maxvit_xlarge_tf_512(pretrained=False, **kwargs) -> MaxxVit:
-    return _create_maxxvit('maxvit_xlarge_tf_512', 'maxvit_xlarge_tf', pretrained=pretrained, **kwargs)
-
-
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
 
 if __name__ == '__main__':
     import torch
@@ -1648,8 +1573,8 @@ if __name__ == '__main__':
     parameter_re = count_parameters(model)
 
     print(parameter)
-    print(parameter_org) # 30916528
-    print(parameter_re) # Sub: 31527664, SubV7: 30890544
+    print(parameter_org)  # 30916528
+    print(parameter_re)  # Sub: 31527664, SubV7: 30890544
 
     out2 = model(x)
 

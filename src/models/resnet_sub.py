@@ -71,6 +71,7 @@ def make_blocks(
         sub_block=None,
         n_block=1,
         stochastic=1.0,
+        neural_drop_rate=0.0,
         **kwargs,
 ):
     stages = []
@@ -108,12 +109,12 @@ def make_blocks(
             downsample = downsample if block_idx == 0 else None
             stride = stride if block_idx == 0 else 1
             block_dpr = drop_path_rate * net_block_idx / (net_num_blocks - 1)  # stochastic depth linear decay rule
-            block_kwargs['neural_drop_rate'] = block_kwargs.get('neural_drop_rate', 0.0) * net_block_idx / (
-                    net_num_blocks - 1)
+            block_ndr = neural_drop_rate * net_block_idx / (net_num_blocks - 1)
+
             blocks.append(block_fn(
                 inplanes, planes, stride, downsample, first_dilation=prev_dilation, sub_block=sub_block,
                 n_block=n_block, stochastic=stochastic, drop_path=DropPath(block_dpr) if block_dpr > 0. else None,
-                **block_kwargs))
+                neural_drop_rate=block_ndr, **block_kwargs))
             prev_dilation = dilation
             inplanes = planes * block_fn.expansion
             net_block_idx += 1
@@ -144,6 +145,10 @@ class BottleneckSub(nn.Module):
             aa_layer=None,
             drop_block=None,
             drop_path=None,
+            sub_block=None,
+            n_block=None,
+            stochastic=0.0,
+            neural_drop_rate=0,
             **kwargs,
     ):
         super(BottleneckSub, self).__init__()
@@ -153,11 +158,7 @@ class BottleneckSub(nn.Module):
         outplanes = planes * self.expansion
         first_dilation = first_dilation or dilation
         use_aa = aa_layer is not None and (stride == 2 or first_dilation != dilation)
-
-        block_fn = kwargs['sub_block']
-        n_block = kwargs.get('n_block', None)
-        stochastic = kwargs.get('stochastic', 0.0)
-        neural_drop_rate = kwargs.get('neural_drop_rate', 0.0)
+        block_fn = sub_block
 
         self.conv1 = SubConvBNBlock(inplanes, first_planes, kernel_size=1, n_block=n_block, stochastic=stochastic,
                                     neural_drop_rate=neural_drop_rate)
@@ -616,6 +617,6 @@ def SubResNet(name, stochastic=1.0, pretrained=False, **kwargs):
 
 
 if __name__ == '__main__':
-    model = SubResNet('resnet18_SubInceptionV7', stem_type='imagenet', neural_drop_rate=0.1)
+    model = SubResNet('resnet50_SubInceptionV9', stem_type='imagenet', neural_drop_rate=0.3, drop_path_rate=0.3)
     input = torch.rand(2, 3, 224, 224)
     out = model(input)

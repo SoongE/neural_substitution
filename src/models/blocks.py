@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from einops.layers.torch import Rearrange
-from timm.layers import drop_path
 
 from src.models.utils import ZeroPad1d
 
@@ -91,6 +90,17 @@ def get_equivalent_kernel_bias(convbn, scale):
     return eq_k, eq_b
 
 
+def drop_path_topology(x, drop_prob: float = 0., training: bool = False, scale_by_keep: bool = True):
+    if drop_prob == 0. or not training:
+        return x
+    keep_prob = 1 - drop_prob
+    shape = (x.shape[0], x.shape[1]) + (1,) * (x.ndim - 2)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
+    if keep_prob > 0.0 and scale_by_keep:
+        random_tensor.div_(keep_prob)
+    return x * random_tensor
+
+
 def substitute(x, conv_layer, shuffle, neural_drop_rate, training):
     n_batch = x.size(0)
     n_x = x.size(-1)
@@ -105,7 +115,7 @@ def substitute(x, conv_layer, shuffle, neural_drop_rate, training):
 
     x = x.permute(4, 0, 1, 2, 3).flatten(0, 1)
     for conv in conv_layer:
-        _out = drop_path(conv(x).unflatten(0, (n_x, n_batch)), neural_drop_rate, training)
+        _out = drop_path_topology(conv(x).unflatten(0, (n_x, n_batch)), neural_drop_rate, training)
         # _out = conv(x).unflatten(0, (n_x, n_batch))
 
         for i, idx in enumerate(rand_idx[p_idx * n_x: (p_idx + 1) * n_x]):
@@ -941,7 +951,7 @@ class SubInceptionV9Block(nn.Module):
             'bias': bias,
             **kwargs
         }
-        hidden_channels1 = int(in_channels * 2)
+        hidden_channels1 = int(in_channels * 1)
         hidden_channels2 = int(in_channels * 2)
         self.conv_reparam = None
         self.stochastic = stochastic
@@ -963,11 +973,8 @@ class SubInceptionV9Block(nn.Module):
 
         # ds
         self.blocks.update({'dsx1': nn.Sequential(
-            nn.Conv2d(in_channels, hidden_channels1, kernel_size=(1, 1), bias=False, groups=kwargs.get('groups', 1)),
-            BNAndPadLayer(padding, hidden_channels1),
-            nn.Conv2d(hidden_channels1, out_channels, kernel_size=kernel_size, stride=stride, bias=False,
-                      groups=kwargs.get('groups', 1)),
-            bn(out_channels),
+            BNAndPadLayer(padding, in_channels),
+            nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
         )})
 
         # ds
@@ -988,16 +995,15 @@ class SubInceptionV9Block(nn.Module):
         _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
         _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
 
-        _k4, _b4 = fuse_bn(*self.blocks['dsx1'][:2], self.n_flow)
-        _k44, _b44 = fuse_bn(*self.blocks['dsx1'][2:], self.n_flow)
-        _k4, _b4 = merge_1x1_kxk(_k4, _b4, _k44, _b44, self.conv_args.get('groups', 1))
+        _k22 = avg_to_kernel(self.conv_reparam.out_channels, self.conv_reparam.kernel_size, self.conv_reparam.groups)
+        _k2,_b2 = fuse_bn(_k22.to(self.conv_reparam.weight.device), self.blocks['dsx1'][0], self.n_flow)
 
         _k3, _b3 = fuse_bn(*self.blocks['dsx2'][:2], self.n_flow)
         _k33, _b33 = fuse_bn(*self.blocks['dsx2'][2:], self.n_flow)
         _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33, self.conv_args.get('groups', 1))
 
-        self.conv_reparam.weight.data = sum([_k0, _k3, _k4, _k1])
-        self.conv_reparam.bias.data = sum([_b0, _b3, _b4, _b1])
+        self.conv_reparam.weight.data = sum([_k0, _k3, _k2, _k1])
+        self.conv_reparam.bias.data = sum([_b0, _b3, _b2, _b1])
         self.__delattr__('blocks')
 
     def forward(self, x):
@@ -1807,30 +1813,30 @@ class ConvMlpV5(nn.Module):
 
 # For Conv
 if __name__ == '__main__':
-    # block = SubInceptionV4Block(5, 5, (3, 3), 2, padding=1, stochastic=1.0)
-    # n_param = sum(p.numel() for p in block.parameters() if p.requires_grad)
-    # input = torch.rand(2, 5, 32, 32, 3)
-    #
+    block = SubInceptionV4Block(5, 5, (3, 3), 2, padding=1, stochastic=1.0, neural_drop_rate=0.5)
+    n_param = sum(p.numel() for p in block.parameters() if p.requires_grad)
+    input = torch.rand(2, 5, 4, 4, 3)
+
     # block.eval()
-    #
-    # out = block(input).sum(-1)
-    # block.re_parameterization()
-    # reparm_out = block(input.sum(-1))
-    # print(out.shape, reparm_out.shape)
-    # print(((out - reparm_out) ** 2).sum())
-    #
-    # n_reparam = sum(p.numel() for p in block.parameters() if p.requires_grad)
-    #
-    # print(n_param, n_reparam, sum(p.numel() for p in nn.Conv2d(5, 5, (3, 3), 2).parameters() if p.requires_grad))
-    mlp = SubMlpV5(10)
-    n_param = sum(p.numel() for p in mlp.parameters() if p.requires_grad)
-    mlp.eval()
-    input = torch.rand(2, 196, 10)
 
-    out = mlp(input)
-    mlp.re_parameterization()
-    re_out = mlp(input)
+    out = block(input).sum(-1)
+    block.re_parameterization()
+    reparm_out = block(input.sum(-1))
+    print(out.shape, reparm_out.shape)
+    print(((out - reparm_out) ** 2).sum())
 
-    n_reparam = sum(p.numel() for p in mlp.parameters() if p.requires_grad)
-    print(((out - re_out) ** 2).sum())
-    print(n_param, n_reparam)
+    n_reparam = sum(p.numel() for p in block.parameters() if p.requires_grad)
+    print(n_param, n_reparam, sum(p.numel() for p in nn.Conv2d(5, 5, (3, 3), 2).parameters() if p.requires_grad))
+
+    # mlp = SubMlpV5(10)
+    # n_param = sum(p.numel() for p in mlp.parameters() if p.requires_grad)
+    # mlp.eval()
+    # input = torch.rand(2, 196, 10)
+    #
+    # out = mlp(input)
+    # mlp.re_parameterization()
+    # re_out = mlp(input)
+    #
+    # n_reparam = sum(p.numel() for p in mlp.parameters() if p.requires_grad)
+    # print(((out - re_out) ** 2).sum())
+    # print(n_param, n_reparam)
