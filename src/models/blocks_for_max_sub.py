@@ -49,7 +49,8 @@ from timm.models import named_apply
 from torch import nn
 import torch
 
-from src.models.blocks import fuse_bn, get_equivalent_kernel_bias, expend_kernel, merge_1x1_kxk, BNAndPadLayer
+from src.models.blocks import fuse_bn, get_equivalent_kernel_bias, expend_kernel, merge_1x1_kxk, BNAndPadLayer, \
+    avg_to_kernel
 
 
 @dataclass
@@ -545,6 +546,7 @@ class SubMbConvBlockV8(nn.Module):
     def re_parameterization(self):
         self.is_deploy = True
 
+
 class SubMbConvBlockV9(nn.Module):
     """ Pre-Norm Conv Block - 1x1 - kxk - 1x1, w/ inverted bottleneck (expand)
     """
@@ -937,7 +939,7 @@ class SubInceptionV8Block(_SubstitutionABC):
 
 class SubInceptionV9Block(_SubstitutionABC):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, bias=False, bn=nn.BatchNorm2d,
-                 **kwargs):
+                 stochastic=True, neural_drop_rate=0.0, **kwargs):
         super().__init__()
         self.conv_args = {
             'in_channels': in_channels,
@@ -948,11 +950,12 @@ class SubInceptionV9Block(_SubstitutionABC):
             'bias': bias,
             **kwargs
         }
-        # print(kwargs.get('groups', 1), in_channels, out_channels, kernel_size, stride, padding)
-        hidden_channels1 = int(in_channels * 2)
+        hidden_channels1 = int(in_channels * 1)
         hidden_channels2 = int(in_channels * 2)
         self.conv_reparam = None
+        self.stochastic = stochastic
         self.n_flow = 1
+        self.neural_drop_rate = neural_drop_rate
 
         self.blocks = nn.ModuleDict()
 
@@ -962,23 +965,26 @@ class SubInceptionV9Block(_SubstitutionABC):
             bn(out_channels),
         )})
 
-        _padding = (1 // 2, 3 // 2)
-        # 1x3
-        self.blocks.update({'1x3': nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=(1, 3), bias=False, stride=stride, padding=_padding,
-                      **kwargs),
+        self.blocks.update({'1x1': nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), stride=stride, bias=False, **kwargs),
             bn(out_channels),
         )})
 
-        _padding = (3 // 2, 1 // 2)
-        # 3x1
-        self.blocks.update({'3x1': nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=(3, 1), bias=False, stride=stride, padding=_padding,
-                      **kwargs),
-            bn(out_channels),
-        )})
+        # ds
+        self.downsample = (in_channels != out_channels)
+        if self.downsample:
+            self.blocks.update({'dsx1': nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), stride=1, bias=False, **kwargs),
+                BNAndPadLayer(padding, out_channels),
+                nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
+            )})
+        else:
+            self.blocks.update({'dsx1': nn.Sequential(
+                BNAndPadLayer(padding, out_channels),
+                nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
+            )})
 
-        # # ds
+        # ds
         self.blocks.update({'dsx2': nn.Sequential(
             nn.Conv2d(in_channels, hidden_channels2, kernel_size=(1, 1), bias=False, groups=kwargs.get('groups', 1)),
             BNAndPadLayer(padding, hidden_channels2),
@@ -991,21 +997,28 @@ class SubInceptionV9Block(_SubstitutionABC):
         self.conv_args['bias'] = True
         self.deploy_blocks = nn.Conv2d(**self.conv_args)
 
-        # _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
-        #
-        # _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
-        # _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
-        #
-        # _k4, _b4 = fuse_bn(*self.blocks['dsx1'][:2], self.n_flow)
-        # _k44, _b44 = fuse_bn(*self.blocks['dsx1'][2:], self.n_flow)
-        # _k4, _b4 = merge_1x1_kxk(_k4, _b4, _k44, _b44, self.conv_args.get('groups', 1))
-        #
-        # _k3, _b3 = fuse_bn(*self.blocks['dsx2'][:2], self.n_flow)
-        # _k33, _b33 = fuse_bn(*self.blocks['dsx2'][2:], self.n_flow)
-        # _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33, self.conv_args.get('groups', 1))
-        #
-        # self.deploy_blocks.weight.data = sum([_k0, _k3, _k4, _k1])
-        # self.deploy_blocks.bias.data = sum([_b0, _b3, _b4, _b1])
+        _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
+
+        _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
+        _k1 = expend_kernel(_k1, self.conv_args['kernel_size'])
+
+        if self.downsample:
+            _k2, _b2 = fuse_bn(*self.blocks['dsx1'][:2], self.n_flow)
+            _k22 = avg_to_kernel(self.deploy_blocks.out_channels, self.deploy_blocks.kernel_size,
+                                 self.deploy_blocks.groups).to(self.blocks['dsx1'][0].weight.device)
+            _k2, _b2 = merge_1x1_kxk(_k2, _b2, _k22, 0, self.deploy_blocks.groups)
+        else:
+            _k22 = avg_to_kernel(self.deploy_blocks.out_channels, self.deploy_blocks.kernel_size,
+                                 self.deploy_blocks.groups)
+            _k2, _b2 = fuse_bn(_k22.to(self.deploy_blocks.weight.device), self.blocks['dsx1'][0], self.n_flow)
+
+        _k3, _b3 = fuse_bn(*self.blocks['dsx2'][:2], self.n_flow)
+        _k33, _b33 = fuse_bn(*self.blocks['dsx2'][2:], self.n_flow)
+        _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33, self.conv_args.get('groups', 1))
+
+        self.deploy_blocks.weight.data = sum([_k0, _k3, _k2, _k1])
+        self.deploy_blocks.bias.data = sum([_b0, _b3, _b2, _b1])
+
         self._is_deploy = True
         self.__delattr__('blocks')
 

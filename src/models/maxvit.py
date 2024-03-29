@@ -137,7 +137,7 @@ class MaxxVitCfg:
     transformer_cfg: MaxxVitTransformerCfg = field(default_factory=MaxxVitTransformerCfg)
     head_hidden_size: int = None
     weight_init: str = 'vit_eff'
-    neural_drop_rate: float = 0.0
+    neural_drop_rate: float = 0.2
 
 
 class Attention2d(nn.Module):
