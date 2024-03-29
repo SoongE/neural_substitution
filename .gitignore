@@ -5,6 +5,7 @@ runs/
 *.pt
 *.pth
 *.pth.tar
+tmp*.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
