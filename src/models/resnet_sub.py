@@ -46,7 +46,8 @@ def downsample_conv(
         block_fn = sub_block
     else:
         block_fn = SubConvBNBlock
-    return block_fn(in_channels, out_channels, kernel_size, stride=stride, n_block=n_block, padding=p,
+
+    return block_fn(in_channels, out_channels, kernel_size, stride=stride, n_block=n_block, padding=p, groups=1,
                     stochastic=stochastic, dilation=first_dilation, bn=norm_layer, neural_drop_rate=0.0)
 
 
@@ -152,27 +153,26 @@ class BottleneckSub(nn.Module):
             **kwargs,
     ):
         super(BottleneckSub, self).__init__()
-
-        width = int(math.floor(planes * (base_width / 64)) * cardinality)
+        width = int(math.floor(planes * (base_width / 64)) * cardinality) # // 2 # Soong Adding 'Sub 2'
         first_planes = width // reduce_first
         outplanes = planes * self.expansion
         first_dilation = first_dilation or dilation
         use_aa = aa_layer is not None and (stride == 2 or first_dilation != dilation)
         block_fn = sub_block
-
+        self.n_block = n_block
         self.conv1 = SubConvBNBlock(inplanes, first_planes, kernel_size=1, n_block=n_block, stochastic=stochastic,
-                                    neural_drop_rate=neural_drop_rate)
+                                    neural_drop_rate=neural_drop_rate, groups=1)
         self.act1 = act_layer(inplace=True)
 
         self.conv2 = block_fn(
             first_planes, width, kernel_size=3, stride=1 if use_aa else stride, n_block=n_block, stochastic=stochastic,
-            padding=first_dilation, dilation=first_dilation, groups=cardinality, neural_drop_rate=neural_drop_rate)
+            padding=first_dilation, dilation=first_dilation, groups=first_planes, neural_drop_rate=neural_drop_rate)
         self.drop_block = drop_block() if drop_block is not None else nn.Identity()
         self.act2 = act_layer(inplace=True)
         self.aa = create_aa(aa_layer, channels=width, stride=stride, enable=use_aa)
 
         self.conv3 = SubConvBNBlock(width, outplanes, kernel_size=1, n_block=n_block, stochastic=stochastic,
-                                    neural_drop_rate=neural_drop_rate)
+                                    neural_drop_rate=neural_drop_rate, groups=1)
 
         self.se = create_attn(attn_layer, outplanes)
 
@@ -191,7 +191,8 @@ class BottleneckSub(nn.Module):
 
     def train_forward(self, x):
         if x.dim() == 4:
-            x = x.unsqueeze(-1)
+            # x = x.unsqueeze(-1).repeat(1,1,1,1,self.n_block)
+            x = (x / self.n_block).unsqueeze(-1).repeat(1, 1, 1, 1, self.n_block)
         shortcut = x
 
         xs1 = self.conv1(x)
@@ -617,6 +618,6 @@ def SubResNet(name, stochastic=1.0, pretrained=False, **kwargs):
 
 
 if __name__ == '__main__':
-    model = SubResNet('resnet18_SubInceptionV9', stem_type='imagenet', neural_drop_rate=0.3, drop_path_rate=0.3)
+    model = SubResNet('resnet50_SubInceptionV9', stem_type='imagenet', neural_drop_rate=0.3, drop_path_rate=0.3)
     input = torch.rand(2, 3, 224, 224)
     out = model(input)
