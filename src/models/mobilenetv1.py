@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from timm.models import register_model
 
-from src.models.blocks import AddInceptionV1Block, AddInceptionV3Block, ConvBNBlock, AddConvBNBlock, AddInceptionV2Block
+from src.models.blocks_new_add import ConvBNBlock, AddConvBNBlock, AddV1, AddV2, AddV3, AddV4
 
 
 class Block(nn.Module):
@@ -83,9 +83,9 @@ methods = {
     'origin': dict(block_fn=ConvBNBlock, n_block=1),
     'Add33': dict(block_fn=AddConvBNBlock, n_block=2),
     'Add333': dict(block_fn=AddConvBNBlock, n_block=3),
-    'AddInceptionV1': dict(block_fn=AddInceptionV1Block, n_block=4),
-    'AddInceptionV2': dict(block_fn=AddInceptionV2Block, n_block=3),
-    'AddInceptionV3': dict(block_fn=AddInceptionV3Block, n_block=4),
+    'AddInceptionV1': dict(block_fn=AddV1, n_block=4),
+    'AddInceptionV2': dict(block_fn=AddV2, n_block=3),
+    'AddInceptionV3': dict(block_fn=AddV3, n_block=4),
 }
 
 

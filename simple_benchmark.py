@@ -1,22 +1,20 @@
 import torch
 from lightning_fabric.utilities import measure_flops
-from torch._C._profiler import ProfilerActivity
-from torch.autograd.profiler import record_function
-from torch.profiler import profile
 
-from src.models import SubResNet, AddResNet
+from src.models import AddResNet
+from src.models.resnet_sub_scriptable import SubResNet
 
 
 def get_flops(model):
-    model.eval()
+    model.train()
     model_fwd = lambda: model(x)
     fwd_flops = measure_flops(model, model_fwd)
     return fwd_flops
 
 
 with torch.device("meta"):
-    sub_model = SubResNet('resnet50_SubInceptionV9')
-    add_model = AddResNet('resnet50_AddInceptionV1')
+    sub_model = SubResNet('resnet50_HybV4')
+    add_model = SubResNet('resnet50_AddV4')
     origin_model = AddResNet('resnet50_origin')
     x = torch.randn(1, 3, 224, 224)
 

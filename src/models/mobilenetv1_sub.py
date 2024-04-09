@@ -8,8 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from timm.models import register_model
 
-from src.models.blocks import SubConvBNBlock, SubInceptionV1Block, SubInceptionV2Block, SubInceptionV3Block, \
-    SubInceptionV6Block
+from src.models.blocks_new import SubConvBNBlock, SubV1, SubV2, SubV3, SubV4
 from src.models.utils import activation_for_substitute
 
 
@@ -110,10 +109,10 @@ backbones = {
 methods = {
     'Sub33': dict(block_fn=SubConvBNBlock, n_block=2),
     'Sub333': dict(block_fn=SubConvBNBlock, n_block=3),
-    'SubInceptionV1': dict(block_fn=SubInceptionV1Block, n_block=4),
-    'SubInceptionV2': dict(block_fn=SubInceptionV2Block, n_block=3),
-    'SubInceptionV3': dict(block_fn=SubInceptionV3Block, n_block=4),
-    'SubInceptionV6': dict(block_fn=SubInceptionV6Block, n_block=4),
+    'SubV1': dict(block_fn=SubV1, n_block=4),
+    'SubV2': dict(block_fn=SubV2, n_block=3),
+    'SubV3': dict(block_fn=SubV3, n_block=4),
+    'SubV4': dict(block_fn=SubV4, n_block=4),
 }
 
 

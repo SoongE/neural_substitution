@@ -4,11 +4,12 @@ from functools import partial
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from timm.models.helpers import build_model_with_cfg, checkpoint_seq
+from timm.models import build_model_with_cfg
 from timm.models.layers import DropBlock2d, DropPath, create_attn, get_act_layer, get_norm_layer, \
     create_classifier
 
-from src.models.blocks_scriptable import SubConvBNBlockTS, SubInceptionV6BlockTS, SubInceptionV7BlockTS
+from src.models.blocks_new import SubConvBNBlock, SubV1, SubV2, SubV3, SubV4
+from src.models.blocks_new_add import AddConvBNBlock, AddV4
 from src.models.utils import activation_for_substitute
 
 
@@ -32,8 +33,8 @@ def downsample_conv(
         first_dilation=None,
         norm_layer=None,
         sub_block=None,
+        add_block=None,
         n_block=1,
-
 ):
     norm_layer = norm_layer or nn.BatchNorm2d
     kernel_size = 1 if stride == 1 and dilation == 1 else kernel_size
@@ -41,9 +42,9 @@ def downsample_conv(
     p = get_padding(kernel_size, stride, first_dilation)
 
     if kernel_size == 3:
-        block_fn = sub_block
+        block_fn = sub_block or add_block
     else:
-        block_fn = SubConvBNBlockTS
+        block_fn = SubConvBNBlock if sub_block else AddConvBNBlock
     return block_fn(in_channels, out_channels, kernel_size, stride=stride, n_block=n_block, padding=p, bn=norm_layer)
 
 
@@ -66,10 +67,14 @@ def make_blocks(
         drop_block_rate=0.,
         drop_path_rate=0.,
         sub_block=None,
+        add_block=None,
         n_block=1,
-
+        neural_drop_rate=0.0,
         **kwargs,
 ):
+    if not isinstance(sub_block, list):
+        sub_block = [sub_block] * len(channels)
+
     stages = []
     feature_info = []
     net_num_blocks = sum(block_repeats)
@@ -77,6 +82,10 @@ def make_blocks(
     net_stride = 4
     dilation = prev_dilation = 1
     for stage_idx, (planes, num_blocks, db) in enumerate(zip(channels, block_repeats, drop_blocks(drop_block_rate))):
+        sub_block_args = {
+            'sub_block': sub_block[stage_idx] if 'Sub' in sub_block[stage_idx].__name__ else None,
+            'add_block': sub_block[stage_idx] if 'Add' in sub_block[stage_idx].__name__ else None,
+        }
         stage_name = f'layer{stage_idx + 1}'  # never liked this name, but weight compat requires it
         stride = 1 if stage_idx == 0 else 2
         if net_stride >= output_stride:
@@ -94,9 +103,8 @@ def make_blocks(
                 dilation=dilation,
                 first_dilation=prev_dilation,
                 norm_layer=kwargs.get('norm_layer'),
-                sub_block=sub_block,
+                **sub_block_args,
                 n_block=n_block,
-
             )
 
         block_kwargs = dict(reduce_first=reduce_first, dilation=dilation, drop_block=db, **kwargs)
@@ -105,10 +113,12 @@ def make_blocks(
             downsample = downsample if block_idx == 0 else None
             stride = stride if block_idx == 0 else 1
             block_dpr = drop_path_rate * net_block_idx / (net_num_blocks - 1)  # stochastic depth linear decay rule
+            block_ndr = neural_drop_rate * net_block_idx / (net_num_blocks - 1)
+
             blocks.append(block_fn(
-                inplanes, planes, stride, downsample, first_dilation=prev_dilation, sub_block=sub_block,
+                inplanes, planes, stride, downsample, first_dilation=prev_dilation, **sub_block_args,
                 n_block=n_block, drop_path=DropPath(block_dpr) if block_dpr > 0. else None,
-                **block_kwargs))
+                neural_drop_rate=block_ndr, **block_kwargs))
             prev_dilation = dilation
             inplanes = planes * block_fn.expansion
             net_block_idx += 1
@@ -139,6 +149,10 @@ class BottleneckSub(nn.Module):
             aa_layer=None,
             drop_block=None,
             drop_path=None,
+            sub_block=None,
+            add_block=None,
+            n_block=None,
+            neural_drop_rate=0.,
             **kwargs,
     ):
         super(BottleneckSub, self).__init__()
@@ -149,19 +163,23 @@ class BottleneckSub(nn.Module):
         first_dilation = first_dilation or dilation
         use_aa = aa_layer is not None and (stride == 2 or first_dilation != dilation)
 
-        block_fn = kwargs['sub_block']
-        n_block = kwargs.get('n_block', None)
-        self.conv1 = SubConvBNBlockTS(inplanes, first_planes, kernel_size=1, n_block=n_block)
+        self.n_block = n_block
+        self.is_sub = True if sub_block else False
+        block_fn = sub_block if self.is_sub else AddConvBNBlock
+        pw_conv_fn = SubConvBNBlock if self.is_sub else AddConvBNBlock
+
+        self.conv1 = pw_conv_fn(inplanes, first_planes, kernel_size=1, n_block=n_block,
+                                neural_drop_rate=neural_drop_rate)
         self.act1 = act_layer(inplace=True)
 
-        self.conv2 = block_fn(
-            first_planes, width, kernel_size=3, stride=1 if use_aa else stride, n_block=n_block, padding=first_dilation,
-            groups=cardinality)
+        self.conv2 = block_fn(first_planes, width, kernel_size=3, stride=1 if use_aa else stride,
+                              neural_drop_rate=neural_drop_rate,
+                              n_block=n_block, padding=first_dilation, groups=cardinality)
         self.drop_block = drop_block() if drop_block is not None else nn.Identity()
         self.act2 = act_layer(inplace=True)
         self.aa = create_aa(aa_layer, channels=width, stride=stride, enable=use_aa)
 
-        self.conv3 = SubConvBNBlockTS(width, outplanes, kernel_size=1, n_block=n_block)
+        self.conv3 = pw_conv_fn(width, outplanes, kernel_size=1, n_block=n_block, neural_drop_rate=neural_drop_rate)
 
         self.se = create_attn(attn_layer, outplanes)
 
@@ -169,7 +187,8 @@ class BottleneckSub(nn.Module):
         self.downsample = downsample
         self.stride = stride
         self.dilation = dilation
-        self.drop_path = drop_path
+        self.drop_path = drop_path if not self.is_sub else None
+        self.train_forward = self.re_parameterized_forward if not self.is_sub else self.train_forward
 
         self.re_parameterized = False
 
@@ -180,7 +199,7 @@ class BottleneckSub(nn.Module):
 
     def train_forward(self, x):
         if x.dim() == 4:
-            x = x.unsqueeze(-1)
+            x = (x / self.n_block).unsqueeze(-1).repeat(1, 1, 1, 1, self.n_block)
         shortcut = x
 
         xs1 = self.conv1(x)
@@ -204,9 +223,6 @@ class BottleneckSub(nn.Module):
         if self.drop_path is not None:
             x = self.drop_path(x)
 
-        if shortcut.size(-1) == 1:
-            shortcut = (shortcut / xs3.size(-1)).repeat(1, 1, 1, 1, xs3.size(-1))
-
         if self.downsample is not None:
             shortcut = self.downsample(shortcut)
 
@@ -217,6 +233,8 @@ class BottleneckSub(nn.Module):
         return xs3
 
     def re_parameterized_forward(self, x):
+        if x.dim() == 5:
+            x = x.sum(-1)
         shortcut = x
 
         x = self.conv1(x)
@@ -267,7 +285,10 @@ class BasicBlockSub(nn.Module):
             aa_layer=None,
             drop_block=None,
             drop_path=None,
-            **kwargs,
+            sub_block=None,
+            add_block=None,
+            n_block=None,
+            neural_drop_rate=0.,
     ):
         super(BasicBlockSub, self).__init__()
 
@@ -278,11 +299,13 @@ class BasicBlockSub(nn.Module):
         first_dilation = first_dilation or dilation
         use_aa = aa_layer is not None and (stride == 2 or first_dilation != dilation)
 
-        block_fn = kwargs['sub_block']
-        n_block = kwargs.get('n_block', None)
+        self.n_block = n_block
+        block_fn = sub_block or add_block
 
-        self.conv1 = block_fn(inplanes, first_planes, (3, 3), stride=stride, n_block=n_block, padding=first_dilation)
-        self.conv2 = block_fn(first_planes, outplanes, (3, 3), stride=1, n_block=n_block, padding=dilation)
+        self.conv1 = block_fn(inplanes, first_planes, (3, 3), stride=stride, n_block=n_block, padding=first_dilation,
+                              neural_drop_rate=neural_drop_rate)
+        self.conv2 = block_fn(first_planes, outplanes, (3, 3), stride=1, n_block=n_block, padding=dilation,
+                              neural_drop_rate=neural_drop_rate)
 
         self.drop_block = drop_block() if drop_block is not None else nn.Identity()
         self.act1 = act_layer(inplace=True)
@@ -532,13 +555,10 @@ class ResNet(nn.Module):
         x = self.act1(x)
         x = self.maxpool(x)
 
-        if self.grad_checkpointing and not torch.jit.is_scripting():
-            x = checkpoint_seq([self.layer1, self.layer2, self.layer3, self.layer4], x, flatten=True)
-        else:
-            x = self.layer1(x)
-            x = self.layer2(x)
-            x = self.layer3(x)
-            x = self.layer4(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
         return x
 
     def forward_head(self, x, pre_logits: bool = False):
@@ -566,19 +586,22 @@ backbones = {
     'resnext50': dict(block=BottleneckSub, layers=[3, 4, 6, 3], cardinality=32, base_width=4),
 }
 methods = {
-    'SubInceptionV6TS': dict(sub_block=SubInceptionV6BlockTS, n_block=4),
-    'SubInceptionV7TS': dict(sub_block=SubInceptionV7BlockTS, n_block=4),
+    'SubV1': dict(sub_block=SubV1, n_block=4),  # DBB
+    'SubV2': dict(sub_block=SubV2, n_block=3),  # ACNet
+    'SubV3': dict(sub_block=SubV3, n_block=4),  # ACNet+
+    'SubV4': dict(sub_block=SubV4, n_block=4),
+    'HybV4': dict(sub_block=[SubV4, AddV4, AddV4, AddV4], n_block=4),
+    'AddV4': dict(sub_block=AddV4, n_block=4),
 }
 
 
-def SubResNetScript(name, pretrained=False, **kwargs):
+def SubResNet(name, pretrained=False, **kwargs):
     b, m = name.split('_')
     model_args = dict(**backbones[b], **methods[m], **kwargs)
     return _create_resnet('ResNetSub', pretrained, **model_args)
 
 
 if __name__ == '__main__':
-    model = SubResNetScript('resnet50_SubInceptionV6TS', stem_type='imagenet')
-    model = torch.jit.script(model, torch.rand(2, 3, 160, 160))
+    model = SubResNet('resnet50_HybV4', stem_type='imagenet')
     input = torch.rand(2, 3, 160, 160)
     out = model(input)

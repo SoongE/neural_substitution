@@ -49,7 +49,7 @@ from timm.models import named_apply
 from torch import nn
 import torch
 
-from src.models.blocks import fuse_bn, get_equivalent_kernel_bias, expend_kernel, merge_1x1_kxk, BNAndPadLayer, \
+from src.models.reparam_utils import fuse_bn, get_equivalent_kernel_bias, expend_kernel, merge_1x1_kxk, BNAndPadLayer, \
     avg_to_kernel
 
 

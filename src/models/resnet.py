@@ -10,8 +10,7 @@ from timm.models.helpers import build_model_with_cfg, checkpoint_seq
 from timm.models.layers import DropBlock2d, DropPath, AvgPool2dSame, create_attn, get_act_layer, get_norm_layer, \
     create_classifier
 
-from src.models.blocks import AddInceptionV1Block, AddConvBNBlock, AddInceptionV2Block, AddInceptionV3Block, \
-    ConvBNBlock, AddInceptionV1in1Block
+from src.models.blocks_new_add import ConvBNBlock, AddConvBNBlock, AddV1, AddV2, AddV3, AddV4
 
 
 def _cfg(url='', **kwargs):
@@ -577,10 +576,10 @@ methods = {
     'Add33333': dict(add_block=AddConvBNBlock, n_block=5),
     'Add6': dict(add_block=AddConvBNBlock, n_block=6),
     'Add10': dict(add_block=AddConvBNBlock, n_block=10),
-    'AddInceptionV1': dict(add_block=AddInceptionV1Block, n_block=4),
-    'AddInceptionV2': dict(add_block=AddInceptionV2Block, n_block=3),
-    'AddInceptionV3': dict(add_block=AddInceptionV3Block, n_block=4),
-    'AddInceptionV1in1': dict(add_block=AddInceptionV1in1Block, n_block=3)
+    'AddV1': dict(add_block=AddV1, n_block=4),
+    'AddV2': dict(add_block=AddV2, n_block=3),
+    'AddV3': dict(add_block=AddV3, n_block=4),
+    'AddV4': dict(add_block=AddV4, n_block=4)
 }
 
 

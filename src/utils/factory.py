@@ -7,7 +7,7 @@ from timm.utils import NativeScaler
 from torch import nn
 from torch.nn import BCEWithLogitsLoss
 
-from src.models import SubResNet, AddResNet, SubMobileNet, AddMobileNet, SubDeit, SubMaxViT
+from src.models import SubResNet, AddResNet, SubMobileNet, AddMobileNet, SubMaxViT
 from src.models.mobileone import mobileone
 from src.models.mobileone_sub import mobileoneSub
 
@@ -17,7 +17,7 @@ def create_model_cls(model_name, in_channels, num_classes, **kwargs):
     kwargs['num_classes'] = num_classes
 
     if 'resnet' in model_name or 'resnext' in model_name:
-        if 'Sub' in model_name:
+        if 'Sub' in model_name or 'Hyb' in model_name:
             model_cls = SubResNet
         else:
             model_cls = AddResNet
@@ -33,8 +33,6 @@ def create_model_cls(model_name, in_channels, num_classes, **kwargs):
         else:
             model_cls = mobileone
             kwargs.update({'substitution': False})
-    elif 'deit' in model_name:
-        model_cls = SubDeit
     elif 'max' in model_name:
         model_cls = SubMaxViT
     else:

@@ -9,13 +9,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['MobileOne', 'mobileone', 'reparameterize_model']
+__all__ = ['MobileOne', 'mobileone']
 
 from timm.layers import drop_path
 
 from timm.models import register_model
 
-from src.models.blocks import BNAndPadLayer, fuse_bn, merge_1x1_kxk
+from src.models.reparam_utils import BNAndPadLayer, fuse_bn, merge_1x1_kxk
 
 
 def substitute(x, conv_layer, shuffle, neural_drop_rate, training):
