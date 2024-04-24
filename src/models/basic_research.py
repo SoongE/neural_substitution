@@ -1,9 +1,7 @@
-import time
-
 import torch
 
 from src.models import deploy, mobileone
-from src.models.deit import SubDeit
+# from src.models.deit import SubDeit
 from src.models.mobilenetv1 import AddMobileNet
 from src.models.mobilenetv1_sub import SubMobileNet
 from src.models.mobileone_sub import mobileoneSub
@@ -15,7 +13,7 @@ if __name__ == '__main__':
     # backbones = ['resnet18', 'resnet34', 'resnet50', 'mobilenet', 'mobileone']
     # methods = ['AddInceptionV1', 'AddInceptionV2', 'AddInceptionV3', 'SubInceptionV1', 'SubInceptionV2', 'SubInceptionV3']
     backbones = ['resnet50']
-    methods = ['HybV4']
+    methods = ['SubV1']
 
     kwargs = {}
     for b_name in backbones:
@@ -32,8 +30,8 @@ if __name__ == '__main__':
                 model_class = mobileone
             if b_name.startswith('mobileone') and m_name.startswith('Sub'):
                 model_class = mobileoneSub
-            if b_name.startswith('deit') and m_name.startswith('Sub'):
-                model_class = SubDeit
+            # if b_name.startswith('deit') and m_name.startswith('Sub'):
+            #     model_class = SubDeit
 
             name = f'{b_name}_{m_name}'
             default_model = AddResNet(f'{b_name}_origin')

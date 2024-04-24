@@ -9,7 +9,7 @@ from timm.models.layers import DropBlock2d, DropPath, create_attn, get_act_layer
     create_classifier
 
 from src.models.blocks_new import SubConvBNBlock, SubV1, SubV2, SubV3, SubV4
-from src.models.blocks_new_add import AddConvBNBlock, AddV4
+from src.models.blocks_new_add import AddConvBNBlock, AddV4, AddV1, ConvBNBlock, AddV2, AddV3
 from src.models.utils import activation_for_substitute
 
 
@@ -34,6 +34,7 @@ def downsample_conv(
         norm_layer=None,
         sub_block=None,
         add_block=None,
+        origin_block=None,
         n_block=1,
 ):
     norm_layer = norm_layer or nn.BatchNorm2d
@@ -42,9 +43,16 @@ def downsample_conv(
     p = get_padding(kernel_size, stride, first_dilation)
 
     if kernel_size == 3:
-        block_fn = sub_block or add_block
+        block_fn = sub_block or add_block or origin_block
     else:
-        block_fn = SubConvBNBlock if sub_block else AddConvBNBlock
+        if sub_block is not None:
+            block_fn = SubConvBNBlock
+        elif add_block is not None:
+            block_fn = AddConvBNBlock
+        elif origin_block is not None:
+            block_fn = ConvBNBlock
+        else:
+            raise NotImplementedError('Not implemented block')
     return block_fn(in_channels, out_channels, kernel_size, stride=stride, n_block=n_block, padding=p, bn=norm_layer)
 
 
@@ -85,6 +93,7 @@ def make_blocks(
         sub_block_args = {
             'sub_block': sub_block[stage_idx] if 'Sub' in sub_block[stage_idx].__name__ else None,
             'add_block': sub_block[stage_idx] if 'Add' in sub_block[stage_idx].__name__ else None,
+            'origin_block': sub_block[stage_idx] if 'ConvBNBlock' in sub_block[stage_idx].__name__ else None,
         }
         stage_name = f'layer{stage_idx + 1}'  # never liked this name, but weight compat requires it
         stride = 1 if stage_idx == 0 else 2
@@ -151,6 +160,7 @@ class BottleneckSub(nn.Module):
             drop_path=None,
             sub_block=None,
             add_block=None,
+            origin_block = None,
             n_block=None,
             neural_drop_rate=0.,
             **kwargs,
@@ -165,8 +175,17 @@ class BottleneckSub(nn.Module):
 
         self.n_block = n_block
         self.is_sub = True if sub_block else False
-        block_fn = sub_block if self.is_sub else AddConvBNBlock
-        pw_conv_fn = SubConvBNBlock if self.is_sub else AddConvBNBlock
+        if sub_block is not None:
+            block_fn = sub_block
+            pw_conv_fn = SubConvBNBlock
+        elif add_block is not None:
+            block_fn = add_block
+            pw_conv_fn = AddConvBNBlock
+        elif origin_block is not None:
+            block_fn = origin_block
+            pw_conv_fn = ConvBNBlock
+        else:
+            raise NotImplementedError('Not implemented block')
 
         self.conv1 = pw_conv_fn(inplanes, first_planes, kernel_size=1, n_block=n_block,
                                 neural_drop_rate=neural_drop_rate)
@@ -287,6 +306,7 @@ class BasicBlockSub(nn.Module):
             drop_path=None,
             sub_block=None,
             add_block=None,
+            origin_block=None,
             n_block=None,
             neural_drop_rate=0.,
     ):
@@ -300,7 +320,15 @@ class BasicBlockSub(nn.Module):
         use_aa = aa_layer is not None and (stride == 2 or first_dilation != dilation)
 
         self.n_block = n_block
-        block_fn = sub_block or add_block
+        self.is_sub = True if sub_block else False
+        if sub_block is not None:
+            block_fn = sub_block
+        elif add_block is not None:
+            block_fn = add_block
+        elif origin_block is not None:
+            block_fn = origin_block
+        else:
+            raise NotImplementedError('Not implemented block')
 
         self.conv1 = block_fn(inplanes, first_planes, (3, 3), stride=stride, n_block=n_block, padding=first_dilation,
                               neural_drop_rate=neural_drop_rate)
@@ -317,6 +345,7 @@ class BasicBlockSub(nn.Module):
         self.stride = stride
         self.dilation = dilation
         self.drop_path = drop_path
+        self.train_forward = self.re_parameterized_forward if not self.is_sub else self.train_forward
 
         self.re_parameterized = False
 
@@ -327,8 +356,9 @@ class BasicBlockSub(nn.Module):
 
     def train_forward(self, x):
         if x.dim() == 4:
-            x = x.unsqueeze(-1)
+            x = (x / self.n_block).unsqueeze(-1).repeat(1, 1, 1, 1, self.n_block)
         shortcut = x
+
         xs1 = self.conv1(x)
         x = torch.mean(xs1, dim=4).squeeze(-1)
         x = self.drop_block(x)
@@ -356,7 +386,10 @@ class BasicBlockSub(nn.Module):
         return xs2
 
     def re_parameterized_forward(self, x):
+        if x.dim() == 5:
+            x = x.sum(-1)
         shortcut = x
+
         x = self.conv1(x)
         x = self.drop_block(x)
         x = self.act1(x)
@@ -586,12 +619,17 @@ backbones = {
     'resnext50': dict(block=BottleneckSub, layers=[3, 4, 6, 3], cardinality=32, base_width=4),
 }
 methods = {
+    'origin': dict(sub_block=ConvBNBlock, n_block=1),
+    'AddV1': dict(sub_block=AddV1, n_block=4),
+    'AddV2': dict(sub_block=AddV2, n_block=4),
+    'AddV3': dict(sub_block=AddV3, n_block=4),
+    'AddV4': dict(sub_block=AddV4, n_block=4),
     'SubV1': dict(sub_block=SubV1, n_block=4),  # DBB
     'SubV2': dict(sub_block=SubV2, n_block=3),  # ACNet
     'SubV3': dict(sub_block=SubV3, n_block=4),  # ACNet+
     'SubV4': dict(sub_block=SubV4, n_block=4),
+    'HybV1': dict(sub_block=[SubV1, AddV1, AddV1, AddV1], n_block=4),
     'HybV4': dict(sub_block=[SubV4, AddV4, AddV4, AddV4], n_block=4),
-    'AddV4': dict(sub_block=AddV4, n_block=4),
 }
 
 
@@ -602,6 +640,6 @@ def SubResNet(name, pretrained=False, **kwargs):
 
 
 if __name__ == '__main__':
-    model = SubResNet('resnet50_HybV4', stem_type='imagenet')
+    model = SubResNet('resnet18_HybV1', stem_type='imagenet')
     input = torch.rand(2, 3, 160, 160)
     out = model(input)

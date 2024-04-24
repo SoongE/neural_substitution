@@ -9,7 +9,7 @@ gpus: 0
 name: ${model.model_name}
 
 info:
-  project: Neural_Substitution_Cifar100
+  project: Neural_Substitution2
 
 train:
   epochs: 100

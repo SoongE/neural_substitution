@@ -14,7 +14,7 @@ def get_flops(model):
 
 with torch.device("meta"):
     sub_model = SubResNet('resnet50_HybV4')
-    add_model = SubResNet('resnet50_AddV4')
+    add_model = AddResNet('resnet50_AddV4')
     origin_model = AddResNet('resnet50_origin')
     x = torch.randn(1, 3, 224, 224)
 
@@ -25,7 +25,7 @@ origin_flops = get_flops(origin_model)
 print(f'add/ori {add_flops / origin_flops:.2f}')
 print(f'sub/ori {sub_flops / origin_flops:.2f}')
 print(f'sub/add {sub_flops / add_flops:.2f}')
-#
+
 # with profile(activities=[ProfilerActivity.CPU], profile_memory=True, record_shapes=True) as prof:
 #     with record_function("model_inference"):
 #         origin_model(x)
