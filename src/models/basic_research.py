@@ -6,14 +6,15 @@ from src.models.mobilenetv1 import AddMobileNet
 from src.models.mobilenetv1_sub import SubMobileNet
 from src.models.mobileone_sub import mobileoneSub
 from src.models.resnet import AddResNet
-from src.models.resnet_sub_scriptable import SubResNet
+from src.models.resnet_sub import SubResNet
+from src.models.resnet_sub_stem import SubResNetStem
 from src.utils.metadata import count_parameters
 
 if __name__ == '__main__':
     # backbones = ['resnet18', 'resnet34', 'resnet50', 'mobilenet', 'mobileone']
     # methods = ['AddInceptionV1', 'AddInceptionV2', 'AddInceptionV3', 'SubInceptionV1', 'SubInceptionV2', 'SubInceptionV3']
     backbones = ['resnet50']
-    methods = ['SubV1']
+    methods = ['StemV4']
 
     kwargs = {}
     for b_name in backbones:
@@ -22,6 +23,8 @@ if __name__ == '__main__':
                 model_class = AddResNet
             if b_name.startswith('resnet') and (m_name.startswith('Sub') or m_name.startswith('Hyb')):
                 model_class = SubResNet
+            if b_name.startswith('resnet') and m_name.startswith('Stem'):
+                model_class = SubResNetStem
             if b_name.startswith('mobilenet') and m_name.startswith('Add'):
                 model_class = AddMobileNet
             if b_name.startswith('mobilenet') and m_name.startswith('Sub'):
@@ -47,6 +50,7 @@ if __name__ == '__main__':
             with torch.no_grad():
                 out = model(input)
                 deploy(model)
+                model.eval()
                 re_out = model(input)
 
             if out.dim() == 5:

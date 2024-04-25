@@ -222,20 +222,20 @@ class BottleneckSub(nn.Module):
         shortcut = x
 
         xs1 = self.conv1(x)
-        x = torch.mean(xs1, dim=4).squeeze(-1)
+        x = torch.sum(xs1, dim=4).squeeze(-1)
         x = self.act1(x)
         x = self.aa(x)
         xs1 = activation_for_substitute(xs1, x)
 
         xs2 = self.conv2(xs1)
-        x = torch.mean(xs2, dim=4).squeeze(-1)
+        x = torch.sum(xs2, dim=4).squeeze(-1)
         x = self.drop_block(x)
         x = self.act2(x)
         x = self.aa(x)
         xs2 = activation_for_substitute(xs2, x)
 
         xs3 = self.conv3(xs2)
-        x = torch.mean(xs3, dim=4).squeeze(-1)
+        x = torch.sum(xs3, dim=4).squeeze(-1)
 
         if self.se is not None:
             x = self.se(x)
@@ -245,7 +245,7 @@ class BottleneckSub(nn.Module):
         if self.downsample is not None:
             shortcut = self.downsample(shortcut)
 
-        x = x + torch.mean(shortcut, dim=4)
+        x = x + torch.sum(shortcut, dim=4)
         x = self.act3(x)
         xs3 = xs3 + shortcut
         xs3 = activation_for_substitute(xs3, x)
@@ -360,26 +360,23 @@ class BasicBlockSub(nn.Module):
         shortcut = x
 
         xs1 = self.conv1(x)
-        x = torch.mean(xs1, dim=4).squeeze(-1)
+        x = torch.sum(xs1, dim=4).squeeze(-1)
         x = self.drop_block(x)
         x = self.act2(x)
         x = self.aa(x)
         xs1 = activation_for_substitute(xs1, x)
 
         xs2 = self.conv2(xs1)
-        x = torch.mean(xs2, dim=4).squeeze(-1)
+        x = torch.sum(xs2, dim=4).squeeze(-1)
         if self.se is not None:
             x = self.se(x)
         if self.drop_path is not None:
             x = self.drop_path(x)
 
-        if shortcut.size(-1) == 1:
-            shortcut = (shortcut / xs2.size(-1)).repeat(1, 1, 1, 1, xs2.size(-1))
-
         if self.downsample is not None:
             shortcut = self.downsample(shortcut)
 
-        x = x + torch.mean(shortcut, dim=4)
+        x = x + torch.sum(shortcut, dim=4)
         x = self.act2(x)
         xs2 = xs2 + shortcut
         xs2 = activation_for_substitute(xs2, x)
@@ -630,6 +627,8 @@ methods = {
     'SubV4': dict(sub_block=SubV4, n_block=4),
     'HybV1': dict(sub_block=[SubV1, AddV1, AddV1, AddV1], n_block=4),
     'HybV4': dict(sub_block=[SubV4, AddV4, AddV4, AddV4], n_block=4),
+    'HybV11': dict(sub_block=[SubV1, SubV1, AddV1, AddV1], n_block=4),
+    'HybV44': dict(sub_block=[SubV4, SubV4, AddV4, AddV4], n_block=4),
 }
 
 
@@ -640,6 +639,6 @@ def SubResNet(name, pretrained=False, **kwargs):
 
 
 if __name__ == '__main__':
-    model = SubResNet('resnet18_HybV1', stem_type='imagenet')
+    model = SubResNet('resnet18_HybV11', stem_type='imagenet')
     input = torch.rand(2, 3, 160, 160)
     out = model(input)

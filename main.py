@@ -4,10 +4,12 @@ import hydra
 import torch
 import wandb
 from omegaconf import DictConfig
+from timm.utils import update_summary
 
 from src.data import get_dataloader
 from src.fit import Fit
 from src.initial_setting import init_seed, init_distributed, init_logger, cuda_setting
+from src.models import deploy
 from src.utils import model_tune, ObjectFactory, CheckpointSaver
 
 
@@ -38,6 +40,12 @@ def main(cfg: DictConfig) -> None:
     fit = Fit(cfg, scaler, device, epochs, model, criterion, optimizer, model_ema, scheduler, saver, loaders)
 
     fit()
+
+    # # Check re_param accuracy is equal to previous one.
+    # deploy(model)
+    # model.eval()
+    # eval_metrics = fit.validate(epoch=cfg.train.epochs)
+    # update_summary(cfg.train.epochs, {}, eval_metrics, 'summary.csv', log_wandb=cfg.wandb)
 
     if cfg.local_rank == 0:
         torch.cuda.empty_cache()

@@ -91,9 +91,65 @@ class SubConvBNBlock(_SubstituteABC):
 
     def re_parameterization(self):
         self.args['bias'] = True
-        self.deploy_blocks = nn.Conv2d(**self.args)
+        self.deploy_blocks = nn.Conv2d(**self.args, device=self.blocks['kxk_0'][0].weight.device)
 
         eq_k, eq_b = get_equivalent_kernel_bias(self.blocks, self.n_flow)
+
+        self.deploy_blocks.weight.data = eq_k
+        self.deploy_blocks.bias.data = eq_b
+
+        self.__delattr__('blocks')
+        self._is_deploy = True
+
+
+class SubStem(_SubstituteABC):
+    def __init__(self, in_channels, out_channels, kernel_size, n_block=4, stride=1, padding=0, bias=False,
+                 bn=nn.BatchNorm2d, groups=1, neural_drop_rate=0.0):
+        super().__init__()
+        assert kernel_size == 7
+        self.args = {
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            # 'stride': stride,
+            # 'padding': padding,
+            'bias': bias,
+            'groups': groups,
+        }
+        self.n_block = n_block
+        self.neural_drop_rate = neural_drop_rate
+
+        self.blocks = nn.ModuleDict()
+
+        self.blocks.update({'1x1': nn.Sequential(
+            nn.Conv2d(**self.args, kernel_size=1, stride=2, padding=0),
+            bn(out_channels),
+        )})
+
+        self.blocks.update({'3x3': nn.Sequential(
+            nn.Conv2d(**self.args, kernel_size=3, stride=2, padding=1),
+            bn(out_channels),
+        )})
+
+        self.blocks.update({'5x5': nn.Sequential(
+            nn.Conv2d(**self.args, kernel_size=5, stride=2, padding=2),
+            bn(out_channels),
+        )})
+
+        self.blocks.update({'7x7': nn.Sequential(
+            nn.Conv2d(**self.args, kernel_size=7, stride=2, padding=3),
+            bn(out_channels),
+        )})
+
+    def re_parameterization(self):
+        self.args['bias'] = True
+        self.deploy_blocks = nn.Conv2d(**self.args, kernel_size=7, stride=2, padding=3)
+
+        eq_k, eq_b = 0, 0
+        for key, value in self.blocks.items():
+            k, b = fuse_bn(value[0], value[1], self.n_flow)
+            if k != '7x7': k = expend_kernel(k, 7)
+            eq_k += k
+            eq_b += b
 
         self.deploy_blocks.weight.data = eq_k
         self.deploy_blocks.bias.data = eq_b
@@ -151,7 +207,7 @@ class SubV1(_SubstituteABC):  # DBB
 
     def re_parameterization(self):
         self.args['bias'] = True
-        self.deploy_blocks = nn.Conv2d(**self.args)
+        self.deploy_blocks = nn.Conv2d(**self.args, device=self.blocks['kxk'][0].weight.device)
 
         _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
 
@@ -353,7 +409,7 @@ class SubV4(_SubstituteABC):
 
     def re_parameterization(self):
         self.args['bias'] = True
-        self.deploy_blocks = nn.Conv2d(**self.args)
+        self.deploy_blocks = nn.Conv2d(**self.args, device=self.blocks['kxk'][0].weight.device)
 
         _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
 
@@ -382,10 +438,10 @@ class SubV4(_SubstituteABC):
 
 if __name__ == '__main__':
     n_block = 4
-    conv = SubV4(3, 3, 3, padding=1, neural_drop_rate=0.4)
+    conv = SubStem(3, 3, 7, stride=2, padding=3, neural_drop_rate=0.4)
     conv.eval()
 
-    x = torch.rand(2, 3, 7, 7, n_block)
+    x = torch.rand(2, 3, 224, 224, n_block)
 
     out = conv(x)
     conv.re_parameterization()

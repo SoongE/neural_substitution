@@ -12,5 +12,4 @@ windows:
 #      - torchrun --master-port=12349 --nproc_per_node=4 main.py --config-name=sub_imagenet gpus=[0,1,2,3] wandb=True train.batch_size=64 train.optimizer.grad_accumulation=4 model.model_name=${MODEL_NAME}_SubInceptionV1 name=${MODEL_NAME}_Sub1 # DBB-Sub
 #      - torchrun --master-port=11345 --nproc_per_node=4 main.py --config-name=sub_imagenet gpus=[4,5,6,7] wandb=True train.batch_size=64 train.optimizer.grad_accumulation=4 model.model_name=${MODEL_NAME}_SubInceptionV2 name=${MODEL_NAME}_Sub2 # ACNet-Sub
 #      - torchrun --master-port=11346 --nproc_per_node=4 main.py --config-name=sub_imagenet gpus=[4,5,6,7] wandb=True train.batch_size=64 train.optimizer.grad_accumulation=4 model.model_name=${MODEL_NAME}_SubInceptionV3 name=${MODEL_NAME}_Sub3 # ACNet-Sub
-       - torchrun --nproc-per-node=8 main.py --config-name=sub_imagenet wandb=True train.batch_size=32 train.optimizer.grad_accumulation=2 model.model_name=mobilenetv1_SubInceptionV6
-       - torchrun --nproc-per-node=8 main.py --config-name=sub_imagenet2 wandb=True model.model_name=resnet50_SubInceptionV6 train.batch_size=64 train.optimizer.grad_accumulation=4
+#      - torchrun --nproc-per-node=8 main.py --config-name=sub_imagenet2 wandb=True model.model_name=resnet50_SubInceptionV6 train.batch_size=64 train.optimizer.grad_accumulation=4

@@ -29,7 +29,7 @@ train:
 model:
   model_name:
   drop_path_rate: 0.15 # 0.15
-  neural_drop_rate: 0.2
+  neural_drop_rate: 0.0
 
 dataset:
   train_size: [ 3,160,160 ]
