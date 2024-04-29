@@ -309,6 +309,7 @@ class BasicBlockSub(nn.Module):
             origin_block=None,
             n_block=None,
             neural_drop_rate=0.,
+            **kwargs,
     ):
         super(BasicBlockSub, self).__init__()
 

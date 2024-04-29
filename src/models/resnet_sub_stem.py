@@ -8,8 +8,8 @@ from timm.models import build_model_with_cfg
 from timm.models.layers import DropBlock2d, DropPath, create_attn, get_act_layer, get_norm_layer, \
     create_classifier
 
-from src.models.blocks_new import SubConvBNBlock, SubV1, SubV2, SubV3, SubV4, SubStem
-from src.models.blocks_new_add import AddConvBNBlock, AddV4, AddV1, ConvBNBlock, AddV2, AddV3
+from src.models.blocks_new import SubConvBNBlock, SubV1, SubV4, SubStem
+from src.models.blocks_new_add import AddConvBNBlock, AddV4, AddV1, ConvBNBlock
 from src.models.utils import activation_for_substitute
 
 
@@ -22,6 +22,30 @@ def create_aa(aa_layer, channels, stride=2, enable=True):
     if not aa_layer or not enable:
         return nn.Identity()
     return aa_layer(stride) if issubclass(aa_layer, nn.AvgPool2d) else aa_layer(channels=channels, stride=stride)
+
+
+class GuidedMaxPool2d(nn.Module):
+    def __init__(self, kernel_size, stride=None, padding=0):
+        super().__init__()
+        if stride is None:
+            stride = kernel_size
+        self.maxpool = nn.MaxPool2d(kernel_size, stride=stride, padding=padding, return_indices=True)
+        self.unpool = nn.MaxUnpool2d(kernel_size, stride=stride, padding=padding)
+
+    def forward(self, xs, x):
+        pool_x, idx = self.maxpool(x)
+        idx = torch.flatten(idx, start_dim=2)
+        pooled_xs = list()
+        for i in range(xs.shape[-1]):
+            _x = xs[:, :, :, :, i]
+            _x = torch.gather(torch.flatten(_x, start_dim=2), -1, idx).reshape(pool_x.size())
+            pooled_xs.append(_x)
+        return torch.stack(pooled_xs, dim=-1)
+
+
+class Identity(nn.Module):
+    def forward(self, x, *args, **kwargs):
+        return x
 
 
 def downsample_conv(
@@ -160,7 +184,7 @@ class BottleneckSub(nn.Module):
             drop_path=None,
             sub_block=None,
             add_block=None,
-            origin_block = None,
+            origin_block=None,
             n_block=None,
             neural_drop_rate=0.,
             **kwargs,
@@ -309,6 +333,7 @@ class BasicBlockSub(nn.Module):
             origin_block=None,
             n_block=None,
             neural_drop_rate=0.,
+            **kwargs,
     ):
         super(BasicBlockSub, self).__init__()
 
@@ -471,6 +496,7 @@ class ResNet(nn.Module):
         self.drop_rate = drop_rate
         self.grad_checkpointing = False
         self.n_block = kwargs['n_block']
+        self.stem_type = stem_type
 
         act_layer = get_act_layer(act_layer)
         norm_layer = get_norm_layer(norm_layer)
@@ -487,8 +513,8 @@ class ResNet(nn.Module):
         self.feature_info = [dict(num_chs=inplanes, reduction=2, module='act1')]
 
         # self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.pool = nn.AvgPool2d(kernel_size=3, stride=2, padding=1)
-        self.pool = nn.Identity() if 'cifar' in stem_type else self.pool
+        self.pool = GuidedMaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.pool = Identity() if 'cifar' in stem_type else self.pool
 
         # Feature Blocks
         channels = [64, 128, 256, 512]
@@ -523,6 +549,7 @@ class ResNet(nn.Module):
 
     def re_parameterization(self):
         self.forward_features = self.forward_features_deploy
+        self.pool = Identity() if 'cifar' in self.stem_type else nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
     @torch.jit.ignore
     def init_weights(self, zero_init_last=True, bn_init=False):
@@ -572,11 +599,7 @@ class ResNet(nn.Module):
         xs = self.conv1(xs)
         x = self.act1(torch.sum(xs, dim=4).squeeze(-1))
         xs = activation_for_substitute(xs, x)
-
-        pooled_xs = list()
-        for i in range(self.n_block):
-            pooled_xs.append(self.pool(xs[:,:,:,:,i]))
-        xs = torch.stack(pooled_xs, dim=-1)
+        xs = self.pool(xs, x)
 
         x = self.layer1(xs)
         x = self.layer2(x)

@@ -3,7 +3,7 @@ from time import perf_counter
 import torch
 from lightning_fabric.utilities import measure_flops, Throughput
 
-from src.models import deploy
+from src.models import deploy, SubResNetStem
 from src.models.resnet_sub import SubResNet
 
 def format_human(size):
@@ -35,8 +35,8 @@ def get_throughput(model):
 
 with torch.device('meta'):
     origin_model = SubResNet('resnet50_origin')
-    add_model = SubResNet('resnet50_AddV1')
-    sub_model = SubResNet('resnet50_HybV44')
+    add_model = SubResNet('resnet50_HybV1')
+    sub_model = SubResNetStem('resnet50_StemV1')
     x = torch.randn(1, 3, 224, 224)
     xx = torch.randn(512, 3, 224, 224)
 

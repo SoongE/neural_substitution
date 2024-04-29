@@ -142,7 +142,7 @@ class SubStem(_SubstituteABC):
 
     def re_parameterization(self):
         self.args['bias'] = True
-        self.deploy_blocks = nn.Conv2d(**self.args, kernel_size=7, stride=2, padding=3)
+        self.deploy_blocks = nn.Conv2d(**self.args, kernel_size=7, stride=2, padding=3, device=self.blocks['1x1'][0].weight.device)
 
         eq_k, eq_b = 0, 0
         for key, value in self.blocks.items():
@@ -358,7 +358,7 @@ class SubV3(_SubstituteABC):
 
 class SubV4(_SubstituteABC):
     def __init__(self, in_channels, out_channels, kernel_size, n_block=4, stride=1, padding=0, bias=False,
-                 bn=nn.BatchNorm2d, groups=1, neural_drop_rate=0.0, **kwargs):
+                 bn=nn.BatchNorm2d, groups=1, neural_drop_rate=0.0, hidden_ratio=2, **kwargs):
         super().__init__()
         assert n_block == 4
         self.args = {
@@ -372,7 +372,7 @@ class SubV4(_SubstituteABC):
         }
         self.n_block = n_block
         self.neural_drop_rate = neural_drop_rate
-        hidden_channels = int(in_channels * 2)
+        hidden_channels = int(in_channels * hidden_ratio)
 
         self.blocks = nn.ModuleDict()
 
