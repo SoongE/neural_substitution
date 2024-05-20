@@ -34,7 +34,6 @@ def init_distributed(cfg):
         torch.cuda.set_device(cfg.local_rank)
         torch.cuda.empty_cache()
 
-
         if cfg.local_rank != 0:
             builtins.print = print_pass
 

@@ -1,0 +1,54 @@
+session_name: xcifar
+windows:
+  - window_name: window
+    layout: tiled
+    panes:
+      - shell_command:
+          - CUDA_VISIBLE_DEVICES=0 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet18_origin train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=0 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet18_AddV1 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=0 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet18_AddV2 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=0 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet18_AddV3 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=0 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet18_StemV7C train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=0 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_StemV7C train.batch_size=128 train.optimizer.grad_accumulation=16
+      - shell_command:
+          - CUDA_VISIBLE_DEVICES=1 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet34_origin train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=1 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet34_AddV1 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=1 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet34_AddV2 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=1 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet34_AddV3 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=1 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet34_StemV7C train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=1 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_StemV7C train.batch_size=128 train.optimizer.grad_accumulation=16
+      - shell_command:
+          - CUDA_VISIBLE_DEVICES=2 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_origin train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=2 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_AddV1 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=2 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_StemV7C train.batch_size=256 train.optimizer.grad_accumulation=8
+      - shell_command:
+          - CUDA_VISIBLE_DEVICES=3 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_AddV2 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=3 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_AddV3 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=3 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_StemV7C train.batch_size=256 train.optimizer.grad_accumulation=8
+
+      - shell_command:
+          - sleep 5
+          - CUDA_VISIBLE_DEVICES=4 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet18_origin train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=4 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet18_AddV1 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=4 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet18_AddV2 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=4 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet18_AddV3 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=4 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet18_StemV7C train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=4 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_StemV7C train.batch_size=128 train.optimizer.grad_accumulation=16
+      - shell_command:
+          - sleep 5
+          - CUDA_VISIBLE_DEVICES=5 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet34_origin train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=5 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet34_AddV1 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=5 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet34_AddV2 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=5 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet34_AddV3 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=5 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet34_StemV7C train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=5 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_StemV7C train.batch_size=128 train.optimizer.grad_accumulation=16
+      - shell_command:
+          - sleep 5
+          - CUDA_VISIBLE_DEVICES=6 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_origin train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=6 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_AddV1 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=6 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_StemV7C train.batch_size=256 train.optimizer.grad_accumulation=8
+      - shell_command:
+          - sleep 5
+          - CUDA_VISIBLE_DEVICES=7 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_AddV2 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=7 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_AddV3 train.batch_size=256 train.optimizer.grad_accumulation=8
+          - CUDA_VISIBLE_DEVICES=7 python main.py --config-name=sub_cifar wandb=True info.project=NS_CIFAR100_V2 model.model_name=resnet50_StemV7C train.batch_size=256 train.optimizer.grad_accumulation=8

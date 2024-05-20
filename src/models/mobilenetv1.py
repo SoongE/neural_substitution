@@ -83,9 +83,9 @@ methods = {
     'origin': dict(block_fn=ConvBNBlock, n_block=1),
     'Add33': dict(block_fn=AddConvBNBlock, n_block=2),
     'Add333': dict(block_fn=AddConvBNBlock, n_block=3),
-    'AddInceptionV1': dict(block_fn=AddV1, n_block=4),
-    'AddInceptionV2': dict(block_fn=AddV2, n_block=3),
-    'AddInceptionV3': dict(block_fn=AddV3, n_block=4),
+    'AddV1': dict(block_fn=AddV1, n_block=4),
+    'AddV2': dict(block_fn=AddV2, n_block=3),
+    'AddV3': dict(block_fn=AddV3, n_block=4),
 }
 
 

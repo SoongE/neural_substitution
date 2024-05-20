@@ -1,0 +1,20 @@
+session_name: sub
+windows:
+  - window_name: window
+    layout: tiled
+    panes:
+      - shell_command:
+        - CUDA_VISIBLE_DEVICES=0 python main.py --config-name=sub_cifar3 wandb=True model.model_name=resnet18_StemV1C name=resnet18_StemV1C_ND model.drop_path_rate=0. model.neural_drop_rate=0.0001 train.lr_scheduler.min_lr=1e-4
+        - CUDA_VISIBLE_DEVICES=0 python main.py --config-name=sub_cifar3 wandb=True model.model_name=resnet18_StemV1C name=resnet18_StemV1C_ND model.drop_path_rate=0. model.neural_drop_rate=0.0001 train.lr_scheduler.min_lr=1e-4
+      - shell_command:
+        - CUDA_VISIBLE_DEVICES=1 python main.py --config-name=sub_cifar3 wandb=True model.model_name=resnet34_StemV1C name=resnet34_StemV1C_ND model.drop_path_rate=0. model.neural_drop_rate=0.0001 train.lr_scheduler.min_lr=1e-4
+        - CUDA_VISIBLE_DEVICES=1 python main.py --config-name=sub_cifar3 wandb=True model.model_name=resnet34_StemV1C name=resnet34_StemV1C_ND model.drop_path_rate=0. model.neural_drop_rate=0.0001 train.lr_scheduler.min_lr=1e-4
+      - shell_command:
+        - CUDA_VISIBLE_DEVICES=2 python main.py --config-name=sub_cifar3 wandb=True model.model_name=resnet50_StemV1C name=resnet50_StemV1C_ND model.drop_path_rate=0. model.neural_drop_rate=0.0001 train.batch_size=128 train.optimizer.grad_accumulation=2 train.optimizer.lr=0.7 train.lr_scheduler.min_lr=1e-4
+        - CUDA_VISIBLE_DEVICES=2 python main.py --config-name=sub_cifar3 wandb=True model.model_name=resnet50_StemV1C name=resnet50_StemV1C_ND model.drop_path_rate=0. model.neural_drop_rate=0.0001 train.batch_size=128 train.optimizer.grad_accumulation=2 train.optimizer.lr=0.7 train.lr_scheduler.min_lr=1e-4
+      - shell_command:
+        - CUDA_VISIBLE_DEVICES=3 python main.py --config-name=sub_cifar3 wandb=True model.model_name=resnext50_StemV1C name=resnext50_StemV1C_ND model.drop_path_rate=0. model.neural_drop_rate=0.0001 train.batch_size=128 train.optimizer.grad_accumulation=2 train.optimizer.lr=0.7 train.lr_scheduler.min_lr=1e-4
+        - CUDA_VISIBLE_DEVICES=3 python main.py --config-name=sub_cifar3 wandb=True model.model_name=resnext50_StemV1C name=resnext50_StemV1C_ND model.drop_path_rate=0. model.neural_drop_rate=0.0001 train.batch_size=128 train.optimizer.grad_accumulation=2 train.optimizer.lr=0.7 train.lr_scheduler.min_lr=1e-4
+      - shell_command:
+        - CUDA_VISIBLE_DEVICES=4 python main.py --config-name=sub_cifar3 wandb=True model.model_name=mobilenet_StemV1C
+        - CUDA_VISIBLE_DEVICES=4 python main.py --config-name=sub_cifar3 wandb=True model.model_name=mobilenet_StemV1C

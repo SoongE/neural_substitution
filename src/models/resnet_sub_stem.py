@@ -4,13 +4,32 @@ from functools import partial
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from timm.layers import drop_path
 from timm.models import build_model_with_cfg
-from timm.models.layers import DropBlock2d, DropPath, create_attn, get_act_layer, get_norm_layer, \
-    create_classifier
+from timm.models.layers import DropBlock2d, create_attn, get_act_layer, get_norm_layer, create_classifier, DropPath
 
-from src.models.blocks_new import SubConvBNBlock, SubV1, SubV4, SubStem
-from src.models.blocks_new_add import AddConvBNBlock, AddV4, AddV1, ConvBNBlock
+from src.models.blocks_new import SubConvBNBlock, SubV1, SubV4, SubStem, SubV7
+from src.models.blocks_new_add import AddConvBNBlock, AddV4, AddV1, ConvBNBlock, AddConvBNBlockOne
 from src.models.utils import activation_for_substitute
+
+
+# class DropPath(nn.Module):
+#     """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
+#     """
+#
+#     def __init__(self, drop_prob: float = 0., scale_by_keep: bool = True):
+#         super(DropPath, self).__init__()
+#         self.drop_prob = drop_prob
+#         self.scale_by_keep = scale_by_keep
+#
+#     def forward(self, x):
+#         if x.dim() == 5:
+#             return drop_path_topology(x, self.drop_prob, self.scale_by_keep)
+#         else:
+#             return drop_path(x, self.drop_prob, self.training, self.scale_by_keep)
+#
+#     def extra_repr(self):
+#         return f'drop_prob={round(self.drop_prob, 3):0.3f}'
 
 
 def get_padding(kernel_size, stride, dilation=1):
@@ -43,6 +62,17 @@ class GuidedMaxPool2d(nn.Module):
         return torch.stack(pooled_xs, dim=-1)
 
 
+class GuidedReLU(nn.Module):
+    def __init__(self, inplace=True):
+        super().__init__()
+        self.act = nn.ReLU(inplace=inplace)
+
+    def forward(self, xs, x):
+        dead_idx = (x != 0).float()
+        xs = torch.mul(xs, dead_idx.unsqueeze(-1))
+        return xs
+
+
 class Identity(nn.Module):
     def forward(self, x, *args, **kwargs):
         return x
@@ -70,7 +100,7 @@ def downsample_conv(
         block_fn = sub_block or add_block or origin_block
     else:
         if sub_block is not None:
-            block_fn = SubConvBNBlock
+            block_fn = AddConvBNBlockOne
         elif add_block is not None:
             block_fn = AddConvBNBlock
         elif origin_block is not None:
@@ -152,6 +182,7 @@ def make_blocks(
                 inplanes, planes, stride, downsample, first_dilation=prev_dilation, **sub_block_args,
                 n_block=n_block, drop_path=DropPath(block_dpr) if block_dpr > 0. else None,
                 neural_drop_rate=block_ndr, **block_kwargs))
+
             prev_dilation = dilation
             inplanes = planes * block_fn.expansion
             net_block_idx += 1
@@ -245,21 +276,21 @@ class BottleneckSub(nn.Module):
             x = (x / self.n_block).unsqueeze(-1).repeat(1, 1, 1, 1, self.n_block)
         shortcut = x
 
-        xs1 = self.conv1(x)
-        x = torch.sum(xs1, dim=4).squeeze(-1)
+        xs = self.conv1(x)
+        x = torch.sum(xs, dim=4).squeeze(-1)
         x = self.act1(x)
         x = self.aa(x)
-        xs1 = activation_for_substitute(xs1, x)
+        xs = activation_for_substitute(xs, x)
 
-        xs2 = self.conv2(xs1)
-        x = torch.sum(xs2, dim=4).squeeze(-1)
+        xs = self.conv2(xs)
+        x = torch.sum(xs, dim=4).squeeze(-1)
         x = self.drop_block(x)
         x = self.act2(x)
         x = self.aa(x)
-        xs2 = activation_for_substitute(xs2, x)
+        xs = activation_for_substitute(xs, x)
 
-        xs3 = self.conv3(xs2)
-        x = torch.sum(xs3, dim=4).squeeze(-1)
+        xs = self.conv3(xs)
+        x = torch.sum(xs, dim=4).squeeze(-1)
 
         if self.se is not None:
             x = self.se(x)
@@ -271,9 +302,9 @@ class BottleneckSub(nn.Module):
 
         x = x + torch.sum(shortcut, dim=4)
         x = self.act3(x)
-        xs3 = xs3 + shortcut
-        xs3 = activation_for_substitute(xs3, x)
-        return xs3
+        xs = xs + shortcut
+        xs = activation_for_substitute(xs, x)
+        return xs
 
     def re_parameterized_forward(self, x):
         if x.dim() == 5:
@@ -384,17 +415,15 @@ class BasicBlockSub(nn.Module):
             x = (x / self.n_block).unsqueeze(-1).repeat(1, 1, 1, 1, self.n_block)
         shortcut = x
 
-        xs1 = self.conv1(x)
-        x = torch.sum(xs1, dim=4).squeeze(-1)
+        xs = self.conv1(x)
+        x = torch.sum(xs, dim=4).squeeze(-1)
         x = self.drop_block(x)
         x = self.act2(x)
         x = self.aa(x)
-        xs1 = activation_for_substitute(xs1, x)
+        xs = activation_for_substitute(xs, x)
 
-        xs2 = self.conv2(xs1)
-        x = torch.sum(xs2, dim=4).squeeze(-1)
-        if self.se is not None:
-            x = self.se(x)
+        xs = self.conv2(xs)
+        x = torch.sum(xs, dim=4).squeeze(-1)
         if self.drop_path is not None:
             x = self.drop_path(x)
 
@@ -403,9 +432,9 @@ class BasicBlockSub(nn.Module):
 
         x = x + torch.sum(shortcut, dim=4)
         x = self.act2(x)
-        xs2 = xs2 + shortcut
-        xs2 = activation_for_substitute(xs2, x)
-        return xs2
+        xs = xs + shortcut
+        xs = activation_for_substitute(xs, x)
+        return xs
 
     def re_parameterized_forward(self, x):
         if x.dim() == 5:
@@ -505,14 +534,14 @@ class ResNet(nn.Module):
         inplanes = 64
         stem_block = kwargs['sub_block'][0]
         if 'cifar' in stem_type:
-            self.conv1 = stem_block(in_chans, inplanes, kernel_size=3, padding=1, bias=False)
+            self.conv1 = SubV1(in_chans, inplanes, n_block=4, kernel_size=3, padding=1, bias=False)
         else:
-            self.conv1 = SubStem(in_chans, inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+            self.conv1 = SubStem(in_chans, inplanes, kernel_size=7, stride=2, padding=3, bias=False,
+                                 n_block=self.n_block)
 
         self.act1 = act_layer(inplace=True)
         self.feature_info = [dict(num_chs=inplanes, reduction=2, module='act1')]
 
-        # self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.pool = GuidedMaxPool2d(kernel_size=3, stride=2, padding=1)
         self.pool = Identity() if 'cifar' in stem_type else self.pool
 
@@ -634,6 +663,9 @@ backbones = {
 methods = {
     'StemV1': dict(sub_block=[SubV1, AddV1, AddV1, AddV1], n_block=4),
     'StemV4': dict(sub_block=[SubV4, AddV4, AddV4, AddV4], n_block=4),
+    'StemV1C': dict(sub_block=[SubV1, ConvBNBlock, ConvBNBlock, ConvBNBlock], n_block=4),
+    'StemV4C': dict(sub_block=[SubV4, ConvBNBlock, ConvBNBlock, ConvBNBlock], n_block=4),
+    'StemV7C': dict(sub_block=[SubV7, ConvBNBlock, ConvBNBlock, ConvBNBlock], n_block=3),
 }
 
 
@@ -644,6 +676,6 @@ def SubResNetStem(name, pretrained=False, **kwargs):
 
 
 if __name__ == '__main__':
-    model = SubResNetStem('resnet50_StemV1', stem_type='imagenet')
+    model = SubResNetStem('resnet34_StemV7C', stem_type='imagenet')
     input = torch.rand(2, 3, 160, 160)
     out = model(input)

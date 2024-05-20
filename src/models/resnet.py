@@ -71,16 +71,16 @@ class Bottleneck(nn.Module):
         block_fn = kwargs['add_block']
         n_block = kwargs.get('n_block', None)
 
-        self.conv1 = AddConvBNBlock(inplanes, first_planes, kernel_size=1, n_block=n_block)
+        self.conv1 = AddConvBNBlock(inplanes, first_planes, kernel_size=1, n_block=1)
         self.act1 = act_layer(inplace=True)
 
         self.conv2 = block_fn(first_planes, width, kernel_size=3, stride=1 if use_aa else stride,
-                              padding=first_dilation, dilation=first_dilation, groups=cardinality, n_block=n_block)
+                              padding=first_dilation, groups=cardinality, n_block=n_block)
         self.drop_block = drop_block() if drop_block is not None else nn.Identity()
         self.act2 = act_layer(inplace=True)
         self.aa = create_aa(aa_layer, channels=width, stride=stride, enable=use_aa)
 
-        self.conv3 = AddConvBNBlock(width, outplanes, kernel_size=1, n_block=n_block)
+        self.conv3 = AddConvBNBlock(width, outplanes, kernel_size=1, n_block=1)
         self.se = create_attn(attn_layer, outplanes)
 
         self.act3 = act_layer(inplace=True)
@@ -156,13 +156,12 @@ class BasicBlock(nn.Module):
         n_block = kwargs.get('n_block', None)
 
         self.conv1 = block_fn(inplanes, first_planes, kernel_size=3, stride=1 if use_aa else stride,
-                              padding=first_dilation, dilation=first_dilation, n_block=n_block)
+                              padding=first_dilation, n_block=n_block)
         self.drop_block = drop_block() if drop_block is not None else nn.Identity()
         self.act1 = act_layer(inplace=True)
         self.aa = create_aa(aa_layer, channels=first_planes, stride=stride, enable=use_aa)
 
-        self.conv2 = block_fn(first_planes, outplanes, kernel_size=3, stride=1, padding=dilation,
-                              dilation=dilation, n_block=n_block)
+        self.conv2 = block_fn(first_planes, outplanes, kernel_size=3, stride=1, padding=dilation, n_block=n_block)
 
         self.se = create_attn(attn_layer, outplanes)
 

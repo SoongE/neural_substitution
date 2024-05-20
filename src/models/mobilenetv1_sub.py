@@ -5,24 +5,43 @@ for more details.
 '''
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from timm.models import register_model
 
-from src.models.blocks_new import SubConvBNBlock, SubV1, SubV2, SubV3, SubV4
+from src.models.blocks_new import SubConvBNBlock, SubV1, SubV2, SubV3, SubV4, SubStem, SubV7
+from src.models.blocks_new_add import AddConvBNBlockOne
 from src.models.utils import activation_for_substitute
 
 
 class Block(nn.Module):
     '''Depthwise conv + Pointwise conv'''
 
-    def __init__(self, in_planes, out_planes, stride=1, block_fn=None, n_block=1, stochastic=None, **kwargs):
+    def __init__(self, in_planes, out_planes, stride=1, **kwargs):
         super(Block, self).__init__()
-        neural_drop_rate = kwargs.get('neural_drop_rate', 0.0)
+        self.conv1 = nn.Conv2d(in_planes, in_planes, kernel_size=3, stride=stride, padding=1, groups=in_planes)
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(out_planes)
+        )
+        self.act = nn.ReLU(inplace=True)
+        self.flatten = nn.Flatten()
 
+    def forward(self, x):
+        if x.dim() == 5:
+            x = x.sum(-1)
+        out = self.act(self.conv1(x))
+        out = self.act(self.conv2(out))
+        return out
+
+
+class SubBlock(nn.Module):
+    '''Depthwise conv + Pointwise conv'''
+
+    def __init__(self, in_planes, out_planes, stride=1, block_fn=None, n_block=4, **kwargs):
+        super(SubBlock, self).__init__()
+        neural_drop_rate = kwargs.get('neural_drop_rate', 0.0)
         self.conv1 = block_fn(in_planes, in_planes, kernel_size=(3, 3), stride=stride, padding=1, groups=in_planes,
-                              n_block=n_block)
-        self.conv2 = SubConvBNBlock(in_planes, out_planes, kernel_size=(1, 1), stride=1, padding=0, n_block=n_block,
-                                    stochastic=stochastic, neural_drop_rate=neural_drop_rate)
+                              n_block=n_block, neural_drop_rate=neural_drop_rate)
+        self.conv2 = AddConvBNBlockOne(in_planes, out_planes, kernel_size=(1, 1), stride=1, padding=0, n_block=4)
 
         self.act = nn.ReLU()
         self.re_parameterized = False
@@ -31,12 +50,12 @@ class Block(nn.Module):
         if x.dim() == 4:
             x = x.unsqueeze(-1)
         xs1 = self.conv1(x)
-        x = torch.mean(xs1, dim=4).squeeze(-1)
+        x = torch.sum(xs1, dim=4).squeeze(-1)
         x = self.act(x)
         xs1 = activation_for_substitute(xs1, x)
 
         xs2 = self.conv2(xs1)
-        x = torch.mean(xs2, dim=4).squeeze(-1)
+        x = torch.sum(xs2, dim=4).squeeze(-1)
         x = self.act(x)
         xs2 = activation_for_substitute(xs2, x)
 
@@ -61,32 +80,52 @@ class MobileNetV1(nn.Module):
         super(MobileNetV1, self).__init__()
         stem_type = block_args.pop('stem_type', '')
         if 'cifar' in stem_type:
-            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False)
+            self.conv1 = SubV1(3, 32, kernel_size=3, n_block=4, padding=1, bias=False)
         else:
-            self.conv1 = nn.Conv2d(3, 32, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = nn.BatchNorm2d(32)
+            self.conv1 = SubStem(3, 32, kernel_size=7, stride=2, padding=3, bias=False)
+
+        self.n_block = 4
         self.block_args = block_args
+        self.act = nn.ReLU(inplace=True)
 
         self.layers = self._make_layers(in_planes=32)
         self.linear = nn.Linear(1024, num_classes)
         self.pool = nn.AdaptiveAvgPool2d(output_size=1)
         self.flatten = nn.Flatten()
 
+        self.forward = self.forward_train
+
+    def re_parameterization(self):
+        self.forward = self.forward_deploy
+
     def _make_layers(self, in_planes):
         layers = []
-        for x in self.cfg:
+        for i, x in enumerate(self.cfg):
+            block_fn = SubBlock if i < 6 else Block
             out_planes = x if isinstance(x, int) else x[0]
             stride = 1 if isinstance(x, int) else x[1]
-            layers.append(Block(in_planes, out_planes, stride, **self.block_args))
+            layers.append(block_fn(in_planes, out_planes, stride, **self.block_args))
             in_planes = out_planes
         return nn.Sequential(*layers)
 
-    def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.layers(out)
+    def forward_train(self, x):
+        xs = (x / self.n_block).unsqueeze(-1).repeat(1, 1, 1, 1, self.n_block)
+        xs = self.conv1(xs)
+        x = self.act(torch.sum(xs, dim=4).squeeze(-1))
+        xs = activation_for_substitute(xs, x)
 
+        out = self.layers(xs)
         if out.dim() == 5:
             out = out.sum(-1)
+        out = self.pool(out)
+        out = self.flatten(out)
+        out = self.linear(out)
+        return out
+
+    def forward_deploy(self, x):
+        out = self.act(self.conv1(x))
+        out = self.layers(out)
+
         out = self.pool(out)
         out = self.flatten(out)
         out = self.linear(out)
@@ -109,27 +148,26 @@ backbones = {
 methods = {
     'Sub33': dict(block_fn=SubConvBNBlock, n_block=2),
     'Sub333': dict(block_fn=SubConvBNBlock, n_block=3),
-    'SubV1': dict(block_fn=SubV1, n_block=4),
-    'SubV2': dict(block_fn=SubV2, n_block=3),
-    'SubV3': dict(block_fn=SubV3, n_block=4),
-    'SubV4': dict(block_fn=SubV4, n_block=4),
+    'StemV1C': dict(block_fn=SubV1, n_block=4),
+    'StemV2C': dict(block_fn=SubV2, n_block=3),
+    'StemV3C': dict(block_fn=SubV3, n_block=4),
+    'StemV4C': dict(block_fn=SubV4, n_block=4),
+    'StemV7C': dict(block_fn=SubV7, n_block=3),
 }
 
 
 @register_model
-def SubMobileNet(name, stochastic=1.0, pretrained=False, **kwargs):
+def SubMobileNet(name, pretrained=False, **kwargs):
     b, m = name.split('_')
-    model_args = dict(**methods[m], stochastic=stochastic, **kwargs)
+    dpr = kwargs.get('drop_path_rate', 0.)
+    if dpr != 0:
+        kwargs.update({'drop_path_rate': 0., 'neural_drop_rate': dpr * 0.001})
+    model_args = dict(**methods[m], **kwargs)
     return MobileNetV1(**dict(kwargs, **model_args))
 
 
 if __name__ == '__main__':
-    net = SubMobileNet('mob_SubInceptionV6', stem_type='cifar')
+    net = SubMobileNet('mob_StemV1C', stem_type='cifar', drop_path_rate=0.1)
     net.eval()
     x = torch.randn(2, 3, 32, 32)
     y = net(x)
-
-    # deploy(net, Block)
-    # yy = net(x)
-
-    # print(((y - yy) ** 2).sum().item())

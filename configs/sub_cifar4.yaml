@@ -1,6 +1,6 @@
 defaults:
   - config
-  - override train/optimizer: lamb
+  - override train/optimizer: sgd
   - override train/lr_scheduler: cosine
   - override dataset: cifar100
   - _self_
@@ -9,7 +9,7 @@ gpus: 0
 name: ${model.model_name}
 
 info:
-  project: Neural_Substitution2
+  project: NS4_CIFAR
 
 train:
   epochs: 100
@@ -20,13 +20,13 @@ train:
 
   lr_scheduler:
     warmup_epochs: 5
-    warmup_lr: 1e-5
-    min_lr: 1e-6
+    warmup_lr: 1e-4
+    min_lr: 1e-4
 
   optimizer:
-    grad_accumulation: 8
-    lr: 3.5e-3
-    weight_decay: 1e-2
+    grad_accumulation: 1
+    lr: 0.7
+    weight_decay: 1e-4
 
 model:
   model_name:
@@ -38,4 +38,8 @@ dataset:
     aa:
     cutmix: 0.0
     mixup: 0.0
-    smoothing: 0.0
+    smoothing: 0.1
+
+hydra:
+  run:
+    dir: runs_NS4/f${dataset.name}_${model.model_name}/${name}_${now:%Y%m%d-%H%M%S}/

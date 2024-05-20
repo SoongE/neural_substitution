@@ -3,11 +3,11 @@ defaults:
   - override train/optimizer: lamb
   - _self_
 
-gpus: [ 0,1,2,3,4,5,6,7 ]
+gpus: [ 0,1,2,3 ]
 name: ${model.model_name}
 
 info:
-  project: Neural_Substitution_ImageNet
+  project: Neural_Substitution_ImageNet2
 
 train:
   epochs: 100

@@ -110,8 +110,6 @@ class SubStem(_SubstituteABC):
         self.args = {
             'in_channels': in_channels,
             'out_channels': out_channels,
-            # 'stride': stride,
-            # 'padding': padding,
             'bias': bias,
             'groups': groups,
         }
@@ -119,11 +117,11 @@ class SubStem(_SubstituteABC):
         self.neural_drop_rate = neural_drop_rate
 
         self.blocks = nn.ModuleDict()
-
-        self.blocks.update({'1x1': nn.Sequential(
-            nn.Conv2d(**self.args, kernel_size=1, stride=2, padding=0),
-            bn(out_channels),
-        )})
+        if n_block == 4:
+            self.blocks.update({'1x1': nn.Sequential(
+                nn.Conv2d(**self.args, kernel_size=1, stride=2, padding=0),
+                bn(out_channels),
+            )})
 
         self.blocks.update({'3x3': nn.Sequential(
             nn.Conv2d(**self.args, kernel_size=3, stride=2, padding=1),
@@ -142,7 +140,8 @@ class SubStem(_SubstituteABC):
 
     def re_parameterization(self):
         self.args['bias'] = True
-        self.deploy_blocks = nn.Conv2d(**self.args, kernel_size=7, stride=2, padding=3, device=self.blocks['1x1'][0].weight.device)
+        self.deploy_blocks = nn.Conv2d(**self.args, kernel_size=7, stride=2, padding=3,
+                                       device=self.blocks['1x1'][0].weight.device)
 
         eq_k, eq_b = 0, 0
         for key, value in self.blocks.items():
@@ -272,7 +271,7 @@ class SubV2(_SubstituteABC):  # ACNet
 
     def re_parameterization(self):
         self.args['bias'] = True
-        self.deploy_blocks = nn.Conv2d(**self.args)
+        self.deploy_blocks = nn.Conv2d(**self.args, device=self.blocks['kxk'][0].weight.device)
 
         _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
 
@@ -337,7 +336,7 @@ class SubV3(_SubstituteABC):
 
     def re_parameterization(self):
         self.args['bias'] = True
-        self.deploy_blocks = nn.Conv2d(**self.args)
+        self.deploy_blocks = nn.Conv2d(**self.args, device=self.blocks['kxk'][0].weight.device)
 
         _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
 
@@ -393,6 +392,7 @@ class SubV4(_SubstituteABC):
                 nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), stride=1, bias=False, groups=groups, **kwargs),
                 BNAndPadLayer(padding, out_channels),
                 nn.AvgPool2d(kernel_size=kernel_size, stride=stride),
+                nn.BatchNorm2d(out_channels),
             )})
         else:
             self.blocks.update({'dsx1': nn.Sequential(
@@ -420,7 +420,8 @@ class SubV4(_SubstituteABC):
             _k2, _b2 = fuse_bn(*self.blocks['dsx1'][:2], self.n_flow)
             _k22 = avg_to_kernel(self.deploy_blocks.out_channels, self.deploy_blocks.kernel_size,
                                  self.deploy_blocks.groups).to(self.blocks['dsx1'][0].weight.device)
-            _k2, _b2 = merge_1x1_kxk(_k2, _b2, _k22, 0, self.deploy_blocks.groups)
+            _k22, _b22 = fuse_bn(_k22, self.blocks['dsx1'][3], self.n_flow)
+            _k2, _b2 = merge_1x1_kxk(_k2, _b2, _k22, _b22, self.deploy_blocks.groups)
         else:
             _k22 = avg_to_kernel(self.deploy_blocks.out_channels, self.deploy_blocks.kernel_size,
                                  self.deploy_blocks.groups)
@@ -436,12 +437,69 @@ class SubV4(_SubstituteABC):
         self._is_deploy = True
 
 
+class SubV7(_SubstituteABC):
+    def __init__(self, in_channels, out_channels, kernel_size, n_block=3, stride=1, padding=0, bias=False,
+                 bn=nn.BatchNorm2d, groups=1, neural_drop_rate=0.0, hidden_ratio=2, **kwargs):
+        super().__init__()
+        assert n_block == 3
+        self.args = {
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            'kernel_size': kernel_size,
+            'stride': stride,
+            'padding': padding,
+            'bias': bias,
+            'groups': groups,
+        }
+        self.n_block = n_block
+        self.neural_drop_rate = neural_drop_rate
+        hidden_channels = int(in_channels * hidden_ratio)
+
+        self.blocks = nn.ModuleDict()
+
+        self.blocks.update({'kxk': nn.Sequential(
+            nn.Conv2d(**self.args),
+            bn(out_channels),
+        )})
+
+        self.blocks.update({'1x1': nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1), stride=stride, bias=False, groups=groups,
+                      **kwargs),
+            bn(out_channels),
+        )})
+
+        self.blocks.update({'x2': nn.Sequential(
+            nn.Conv2d(in_channels, hidden_channels, kernel_size=(1, 1), bias=False, groups=groups),
+            BNAndPadLayer(padding, hidden_channels),
+            nn.Conv2d(hidden_channels, out_channels, kernel_size=kernel_size, stride=stride, bias=False, groups=groups),
+            bn(out_channels),
+        )})
+
+    def re_parameterization(self):
+        self.args['bias'] = True
+        self.deploy_blocks = nn.Conv2d(**self.args, device=self.blocks['kxk'][0].weight.device)
+
+        _k0, _b0 = fuse_bn(*self.blocks['kxk'], self.n_flow)
+
+        _k1, _b1 = fuse_bn(*self.blocks['1x1'], self.n_flow)
+        _k1 = expend_kernel(_k1, self.args['kernel_size'])
+
+        _k3, _b3 = fuse_bn(*self.blocks['x2'][:2], self.n_flow)
+        _k33, _b33 = fuse_bn(*self.blocks['x2'][2:], self.n_flow)
+        _k3, _b3 = merge_1x1_kxk(_k3, _b3, _k33, _b33, self.args.get('groups', 1))
+
+        self.deploy_blocks.weight.data = sum([_k0, _k1, _k3])
+        self.deploy_blocks.bias.data = sum([_b0, _b1, _b3])
+        self.__delattr__('blocks')
+        self._is_deploy = True
+
+
 if __name__ == '__main__':
-    n_block = 4
-    conv = SubStem(3, 3, 7, stride=2, padding=3, neural_drop_rate=0.4)
+    n_block = 3
+    conv = SubV7(3, 3, 1, stride=1, padding=0, neural_drop_rate=0.4)
     conv.eval()
 
-    x = torch.rand(2, 3, 224, 224, n_block)
+    x = torch.rand(5, 3, 224, 224, n_block)
 
     out = conv(x)
     conv.re_parameterization()

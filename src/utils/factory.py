@@ -24,7 +24,7 @@ def create_model_cls(model_name, in_channels, num_classes, **kwargs):
         else:
             model_cls = AddResNet
     elif 'mobilenet' in model_name:
-        if 'Sub' in model_name:
+        if 'Sub' in model_name or 'Stem' in model_name:
             model_cls = SubMobileNet
         else:
             model_cls = AddMobileNet
@@ -79,14 +79,11 @@ class ObjectFactory:
         self.train.iter_per_epoch = iter_per_epoch
 
         if 'cifar' in cfg.dataset.name:
-            filter_bias_and_bn = False
+            filter_bias_and_bn = True
         else:
-            filter_bias_and_bn = True  # Only for our is False until cifar
-            # b, m = cfg.model.model_name.split('_') if '_' in cfg.model.model_name else (cfg.model.model_name, '')
-            # filter_bias_and_bn = False if '1' in m or '3' in m else True
-            # filter_bias_and_bn = False if 'mobile' in b else filter_bias_and_bn
-        optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=self.optim),
-                                        filter_bias_and_bn=filter_bias_and_bn)
+            filter_bias_and_bn = True
+
+        optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=self.optim), filter_bias_and_bn=filter_bias_and_bn)
         print(optimizer)
 
         updates_per_epoch = \

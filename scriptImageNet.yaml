@@ -2,14 +2,13 @@ session_name: imageNet
 windows:
   - window_name: window
     layout: tiled
-    shell_command_before:
-      - export MODEL_NAME=resnet50
     panes:
-#      - torchrun --master-port=12345 --nproc_per_node=4 main.py --config-name=sub_imagenet gpus=[4,5,6,7] wandb=True train.batch_size=64 train.optimizer.grad_accumulation=4 model.model_name=${MODEL_NAME} name=${MODEL_NAME} # Origin
-#      - torchrun --master-port=12346 --nproc_per_node=4 main.py --config-name=sub_imagenet gpus=[4,5,6,7] wandb=True train.batch_size=64 train.optimizer.grad_accumulation=4 model.model_name=${MODEL_NAME}_AddInceptionV1 name=${MODEL_NAME}_Add1 # DBB
-#      - torchrun --master-port=12347 --nproc_per_node=4 main.py --config-name=sub_imagenet gpus=[0,1,2,3] wandb=True train.batch_size=64 train.optimizer.grad_accumulation=4 model.model_name=${MODEL_NAME}_AddInceptionV2 name=${MODEL_NAME}_Add2 # ACNet
-#      - torchrun --master-port=12348 --nproc_per_node=4 main.py --config-name=sub_imagenet gpus=[0,1,2,3] wandb=True train.batch_size=64 train.optimizer.grad_accumulation=4 model.model_name=${MODEL_NAME}_AddInceptionV3 name=${MODEL_NAME}_Add3 # ACNet+
-#      - torchrun --master-port=12349 --nproc_per_node=4 main.py --config-name=sub_imagenet gpus=[0,1,2,3] wandb=True train.batch_size=64 train.optimizer.grad_accumulation=4 model.model_name=${MODEL_NAME}_SubInceptionV1 name=${MODEL_NAME}_Sub1 # DBB-Sub
-#      - torchrun --master-port=11345 --nproc_per_node=4 main.py --config-name=sub_imagenet gpus=[4,5,6,7] wandb=True train.batch_size=64 train.optimizer.grad_accumulation=4 model.model_name=${MODEL_NAME}_SubInceptionV2 name=${MODEL_NAME}_Sub2 # ACNet-Sub
-#      - torchrun --master-port=11346 --nproc_per_node=4 main.py --config-name=sub_imagenet gpus=[4,5,6,7] wandb=True train.batch_size=64 train.optimizer.grad_accumulation=4 model.model_name=${MODEL_NAME}_SubInceptionV3 name=${MODEL_NAME}_Sub3 # ACNet-Sub
-#      - torchrun --nproc-per-node=8 main.py --config-name=sub_imagenet2 wandb=True model.model_name=resnet50_SubInceptionV6 train.batch_size=64 train.optimizer.grad_accumulation=4
+#      - shell_command:
+#          - torchrun --nproc_per_node=4 main.py --config-name=sub_imagenet wandb=True model.model_name=resnet18_origin train.batch_size=256 train.optimizer.grad_accumulation=1
+#          - torchrun --nproc_per_node=4 main.py --config-name=sub_imagenet wandb=True model.model_name=resnet18_AddV1 train.batch_size=256 train.optimizer.grad_accumulation=1
+#          - torchrun --nproc_per_node=4 main.py --config-name=sub_imagenet wandb=True model.model_name=resnet18_AddV2 train.batch_size=256 train.optimizer.grad_accumulation=1
+#          - torchrun --nproc_per_node=4 main.py --config-name=sub_imagenet wandb=True model.model_name=resnet18_AddV3 train.batch_size=256 train.optimizer.grad_accumulation=1
+        - CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --master-port=13121 --nproc_per_node=4 main.py --config-name=sub_imagenet1 gpus='[0,1,2,3]' wandb=True model.model_name=resnet18_StemV1C train.batch_size=128 train.optimizer.grad_accumulation=2 model.neural_drop_rate=0.005 name=resnet18_StemV1C_ND2 info.project=Neural_Substitution_ImageNet2
+        - CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --master-port=13125 --nproc_per_node=4 main.py --config-name=sub_imagenet2 gpus='[4,5,6,7]' wandb=True model.model_name=resnet50_StemV1C train.batch_size=64 train.optimizer.grad_accumulation=4 model.neural_drop_rate=0.015 name=resnet50_StemV1C_ND2 info.project=Neural_Substitution_ImageNet2
+#          - CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 main.py --config-name=sub_imagenet gpus='[0,1]' wandb=True train.batch_size=64 train.optimizer.grad_accumulation=4 model.model_name=mobilenetv1_StemV1C
+#          - torchrun --nproc_per_node=4 main.py --config-name=sub_imagenet wandb=True model.model_name=resnet50_StemV1C train.batch_size=64 train.optimizer.grad_accumulation=4

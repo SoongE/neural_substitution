@@ -8,7 +8,7 @@ from timm.models import build_model_with_cfg
 from timm.models.layers import DropBlock2d, DropPath, create_attn, get_act_layer, get_norm_layer, \
     create_classifier
 
-from src.models.blocks_new import SubConvBNBlock, SubV1, SubV2, SubV3, SubV4
+from src.models.blocks_new import SubConvBNBlock, SubV1, SubV2, SubV3, SubV4, SubV7
 from src.models.blocks_new_add import AddConvBNBlock, AddV4, AddV1, ConvBNBlock, AddV2, AddV3
 from src.models.utils import activation_for_substitute
 
@@ -619,17 +619,19 @@ backbones = {
 methods = {
     'origin': dict(sub_block=ConvBNBlock, n_block=1),
     'AddV1': dict(sub_block=AddV1, n_block=4),
-    'AddV2': dict(sub_block=AddV2, n_block=4),
+    'AddV2': dict(sub_block=AddV2, n_block=3),
     'AddV3': dict(sub_block=AddV3, n_block=4),
     'AddV4': dict(sub_block=AddV4, n_block=4),
     'SubV1': dict(sub_block=SubV1, n_block=4),  # DBB
     'SubV2': dict(sub_block=SubV2, n_block=3),  # ACNet
     'SubV3': dict(sub_block=SubV3, n_block=4),  # ACNet+
     'SubV4': dict(sub_block=SubV4, n_block=4),
+    'SubV7': dict(sub_block=SubV7, n_block=3),
     'HybV1': dict(sub_block=[SubV1, AddV1, AddV1, AddV1], n_block=4),
     'HybV4': dict(sub_block=[SubV4, AddV4, AddV4, AddV4], n_block=4),
     'HybV11': dict(sub_block=[SubV1, SubV1, AddV1, AddV1], n_block=4),
     'HybV44': dict(sub_block=[SubV4, SubV4, AddV4, AddV4], n_block=4),
+    'LastV1': dict(sub_block=[ConvBNBlock, ConvBNBlock, SubV1, SubV1], n_block=4),
 }
 
 
@@ -640,6 +642,6 @@ def SubResNet(name, pretrained=False, **kwargs):
 
 
 if __name__ == '__main__':
-    model = SubResNet('resnet18_HybV11', stem_type='imagenet')
+    model = SubResNet('resnet18_LastV1', stem_type='imagenet')
     input = torch.rand(2, 3, 160, 160)
     out = model(input)

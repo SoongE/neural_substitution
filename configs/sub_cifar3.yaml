@@ -1,6 +1,6 @@
 defaults:
   - config
-  - override train/optimizer: lamb
+  - override train/optimizer: sgd
   - override train/lr_scheduler: cosine
   - override dataset: cifar100
   - _self_
@@ -9,7 +9,7 @@ gpus: 0
 name: ${model.model_name}
 
 info:
-  project: Neural_Substitution2
+  project: NS3_mobilenet_07
 
 train:
   epochs: 100
@@ -20,18 +20,18 @@ train:
 
   lr_scheduler:
     warmup_epochs: 5
-    warmup_lr: 1e-5
-    min_lr: 1e-6
+    warmup_lr: 1e-4
+    min_lr: 1e-4
 
   optimizer:
-    grad_accumulation: 8
-    lr: 3.5e-3
-    weight_decay: 1e-2
+    grad_accumulation: 1
+    lr: 0.7
+    weight_decay: 1e-4
 
 model:
   model_name:
-  drop_path_rate: 0.15
-  neural_drop_rate: 0.015
+  drop_path_rate: 0.0
+  neural_drop_rate: 0.0
 
 dataset:
   augmentation:
@@ -39,3 +39,7 @@ dataset:
     cutmix: 0.0
     mixup: 0.0
     smoothing: 0.0
+
+hydra:
+  run:
+    dir: runs_NS3_lr07/f${dataset.name}_${model.model_name}/${name}_${now:%Y%m%d-%H%M%S}/
