@@ -3,7 +3,7 @@
 Official PyTorch implementation for Neural Substitution. For details, see the
 paper: [Neural Substitution for Branch-level Network Re-parameterization](TBD)
 
-## Training
+## How to run
 
 ### Requirements
 
