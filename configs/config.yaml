@@ -1,0 +1,45 @@
+defaults:
+  - _self_
+  - train: base_train
+  - dataset: imagenet
+  - info: info
+  - model: base_model
+
+name: experiment0
+
+gpus: 0
+wandb: True
+distributed: False
+local_rank: 0
+world_size: 1
+port: 3456
+is_master: True
+do_benchmark: False
+torchcompile: False
+dbb_trans: False
+
+
+hydra:
+  run:
+    dir: runs/${dataset.name}_${model.model_name}/${name}_${now:%Y%m%d-%H%M%S}/
+  job:
+    chdir: True
+  job_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '[%(levelname)s] - %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+      file:
+        class: logging.FileHandler
+        formatter: simple
+        filename: ${now:%m-%d}_${now:%H-%M}_${hydra.job.name}_${name}.log
+    root:
+      handlers:
+        - console
+        - file
+    disable_existing_loggers: false

@@ -1,0 +1,7 @@
+defaults:
+  - base_optim
+
+opt: sgd
+lr: 0.1
+weight_decay: 1e-4
+nesterov: True

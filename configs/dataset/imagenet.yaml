@@ -1,0 +1,21 @@
+defaults:
+  - augmentation: base_augmentation
+
+name: imageNet
+dataset_name: imageNet
+root: /data/imageNet
+task: multiclass
+
+in_channels: 3
+num_classes: 1000
+train_size: [ 3,224,224 ]
+test_size: [ 3,224,224 ]
+
+train: train
+valid: validation
+test: test
+class_map:
+
+augmentation:
+  mean: [ 0.485, 0.456, 0.406 ]
+  std: [ 0.229, 0.224, 0.225 ]

@@ -1,0 +1,43 @@
+defaults:
+  - config
+  - override train/optimizer: lamb
+  - override train/lr_scheduler: cosine
+  - override dataset: imagenet
+  - _self_
+
+gpus: [ 0,1,2,3 ]
+name: ${model.model_name}
+
+info:
+  project: NeuralSubstitution_ImageNet
+
+train:
+  epochs: 100
+  batch_size: 128
+  num_workers: 12
+  bce_loss: True
+  target_thresh: 0.2
+
+  lr_scheduler:
+    warmup_epochs: 5
+    warmup_lr: 1e-4
+    min_lr: 1e-6
+
+  optimizer:
+    grad_accumulation: 4
+    lr: 8e-3
+    weight_decay: 1e-2
+
+model:
+  model_name:
+  drop_path_rate: 0.0
+  neural_drop_rate: 0.0
+
+dataset:
+  train_size: [ 3,160,160 ]
+  augmentation:
+    mixup: 0.1
+    cutmix: 1.0
+    crop_pct: 0.95
+    aa: rand-m6-mstd0.5-inc1
+    smoothing: 0.0

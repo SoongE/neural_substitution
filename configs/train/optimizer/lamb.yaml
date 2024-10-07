@@ -1,0 +1,9 @@
+defaults:
+  - base_optim
+
+opt: lamb
+
+lr: 3.5e-3
+weight_decay: 0.02
+opt_betas: [ 0.9, 0.999 ]
+opt_eps: 1e-6

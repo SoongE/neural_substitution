@@ -1,0 +1,31 @@
+defaults:
+  - augmentation: base_augmentation
+
+name: cifar10
+dataset_name: torch/cifar10
+root: /data/cifar
+task: multiclass
+
+in_channels: 3
+num_classes: 10
+train_size: [ 3,32,32 ]
+test_size: [ 3,32,32 ]
+
+train: train
+valid: test
+test: test
+class_map:
+
+augmentation:
+  mean: [ 0.5070751592371323, 0.48654887331495095, 0.4409178433670343 ]
+  std: [ 0.2673342858792401, 0.2564384629170883, 0.27615047132568404 ]
+
+  train_interpolation: bicubic
+  aa:
+  autoaug: True
+  crop_pct: 1.0
+
+  color_jitter: 0.0
+  mixup: 0.0
+  cutmix: 0.0
+  smoothing: 0.0

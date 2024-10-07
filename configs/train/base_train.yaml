@@ -1,0 +1,30 @@
+defaults:
+  - lr_scheduler: cosine
+  - optimizer: sgd
+
+epochs: 100
+iter_per_epoch:
+batch_size: 256
+num_workers: 8
+seed: 0
+target_metric: Top1
+eval_metrics: [ Top1 ]
+
+criterion: crossentropy
+bce_loss: False
+bce_target_thresh:
+
+model_ema: False
+model_ema_force_cpu: False
+model_ema_decay: 0.9998
+
+sync_bn: False
+dist_bn: reduce # [ broadcast | reduce ]
+ddp_bb: True
+
+double_valid: False
+channels_last: True
+amp: True
+resume: False
+resume_opt: True
+save_max_history: 1

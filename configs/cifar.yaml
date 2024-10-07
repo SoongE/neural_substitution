@@ -1,0 +1,41 @@
+defaults:
+  - config
+  - override train/optimizer: sgd
+  - override train/lr_scheduler: cosine
+  - override dataset: cifar100
+  - _self_
+
+gpus: 0
+name: ${model.model_name}
+
+info:
+  project: NeuralSubstitution_CIFAR100
+
+train:
+  epochs: 100
+  batch_size: 256
+  num_workers: 4
+  bce_loss: False
+  target_thresh: 0.0
+
+  lr_scheduler:
+    warmup_epochs: 5
+    warmup_lr: 1e-4
+    min_lr: 1e-4
+
+  optimizer:
+    grad_accumulation: 1
+    lr: 0.7
+    weight_decay: 1e-4
+
+model:
+  model_name:
+  drop_path_rate: 0.15
+  neural_drop_rate: 0.015
+
+dataset:
+  augmentation:
+    aa:
+    cutmix: 0.0
+    mixup: 0.0
+    smoothing: 0.1

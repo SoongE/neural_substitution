@@ -1,0 +1,20 @@
+sched: ???
+
+lr_noise:
+lr_noise_pct: 0.67
+lr_noise_std: 1.0
+lr_cycle_mul: 1.0
+lr_cycle_decay: 0.5
+lr_cycle_limit: 1
+lr_k_decay: 1
+
+warmup_scheduler: linear
+warmup_lr: 0.0001
+min_lr: 1e-6
+epoch_repeats: 0
+start_epoch:
+decay_epochs: 100
+warmup_epochs: 3
+cooldown_epochs: 10
+patience_epochs: 10
+decay_rate: 0.1
