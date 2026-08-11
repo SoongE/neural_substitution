@@ -1,7 +1,7 @@
 # Neural Substitution
 
 Official PyTorch implementation for Neural Substitution. For details, see the
-paper: [Neural Substitution for Branch-level Network Re-parameterization](TBD)
+paper: [Neural Substitution for Branch-level Network Re-parameterization](https://openaccess.thecvf.com/content/ACCV2024/papers/Oh_Neural_Substitution_for_Branch-level_Network_Re-parameterization_ACCV_2024_paper.pdf)
 
 ## How to run
 
@@ -54,5 +54,12 @@ This repository is released under the Apache 2.0 license as found in the [LICENS
 
 ## Citation
 ```
-TBD
+@inproceedings{oh2024neural,
+  title={Neural Substitution for Branch-Level Network Re-parameterization},
+  author={Oh, Seungmin and Ryu, Jongbin},
+  booktitle={Asian Conference on Computer Vision},
+  pages={104--120},
+  year={2024},
+  organization={Springer}
+}
 ```
